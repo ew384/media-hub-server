@@ -1,0 +1,133 @@
+<!-- templates/weekly-report.hbs -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>会员系统周报</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+            border-radius: 10px 10px 0 0;
+        }
+        .content {
+            background: #fff;
+            padding: 30px;
+            border: 1px solid #ddd;
+            border-top: none;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #007bff;
+            text-align: center;
+        }
+        .stat-number {
+            font-size: 32px;
+            font-weight: bold;
+            color: #007bff;
+            display: block;
+        }
+        .stat-label {
+            color: #666;
+            font-size: 14px;
+        }
+        .chart-placeholder {
+            background: #f8f9fa;
+            height: 200px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            margin: 20px 0;
+        }
+        .footer {
+            background: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            border-radius: 0 0 10px 10px;
+            color: #666;
+            font-size: 12px;
+            border: 1px solid #ddd;
+            border-top: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📊 会员系统周报</h1>
+        <p>报告时间：{{reportDate}}</p>
+    </div>
+    
+    <div class="content">
+        <h2>📈 核心指标</h2>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <span class="stat-number">{{totalActive}}</span>
+                <span class="stat-label">活跃订阅</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-number">¥{{monthlyRevenue}}</span>
+                <span class="stat-label">本月收入</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-number">{{expiringCount}}</span>
+                <span class="stat-label">即将过期</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-number">{{autoRenewRate}}%</span>
+                <span class="stat-label">自动续费率</span>
+            </div>
+        </div>
+        
+        <h2>📊 套餐分布</h2>
+        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
+            {{#each planDistribution}}
+            <div style="margin: 10px 0; padding: 10px; background: white; border-radius: 5px;">
+                <strong>{{@key}}:</strong> {{this}} 个订阅
+                <div style="background: #007bff; height: 20px; width: {{this}}%; border-radius: 3px; margin-top: 5px;"></div>
+            </div>
+            {{/each}}
+        </div>
+        
+        <h2>⚠️ 注意事项</h2>
+        <ul>
+            <li>本周有 {{expiringCount}} 个订阅即将过期，需要关注续费情况</li>
+            <li>自动续费率为 {{autoRenewRate}}%，建议优化续费流程</li>
+            <li>{{#if (gt totalExpired 0)}}有 {{totalExpired}} 个已过期订阅需要处理{{/if}}</li>
+        </ul>
+        
+        <h2>💡 建议行动</h2>
+        <ul>
+            <li>对即将过期的用户发送个性化续费提醒</li>
+            <li>分析高价值用户的使用模式，优化产品功能</li>
+            <li>优化新用户引导流程，提高转化率</li>
+            <li>考虑推出限时优惠活动提升续费率</li>
+        </ul>
+    </div>
+    
+    <div class="footer">
+        <p>此报告由系统自动生成</p>
+        <p>如需更详细的数据分析，请登录管理后台查看</p>
+    </div>
+</body>
+</html>

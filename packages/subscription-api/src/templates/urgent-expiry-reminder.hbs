@@ -1,0 +1,124 @@
+<!-- templates/urgent-expiry-reminder.hbs -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>紧急：会员即将到期</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+            border-radius: 10px 10px 0 0;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+            100% { transform: scale(1); }
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+        .urgent-notice {
+            background: #f8d7da;
+            border: 2px solid #f5c6cb;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .countdown {
+            font-size: 28px;
+            font-weight: bold;
+            color: #dc3545;
+            margin: 10px 0;
+        }
+        .btn-urgent {
+            display: inline-block;
+            background: #dc3545;
+            color: white;
+            padding: 18px 35px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 16px;
+            margin: 20px 0;
+            animation: glow 2s infinite alternate;
+        }
+        @keyframes glow {
+            from { box-shadow: 0 0 10px #dc3545; }
+            to { box-shadow: 0 0 20px #dc3545, 0 0 30px #dc3545; }
+        }
+        .content {
+            background: #fff;
+            padding: 30px;
+            border: 1px solid #ddd;
+            border-top: none;
+        }
+        .footer {
+            background: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            border-radius: 0 0 10px 10px;
+            color: #666;
+            font-size: 12px;
+            border: 1px solid #ddd;
+            border-top: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🚨 紧急提醒</h1>
+        <p>您的会员即将到期</p>
+    </div>
+    
+    <div class="content">
+        <div class="urgent-notice">
+            <h2>⏰ 倒计时</h2>
+            <div class="countdown">{{remainingHours}} 小时</div>
+            <p>您的 <strong>{{planName}}</strong> 将在 {{remainingHours}} 小时后到期！</p>
+        </div>
+        
+        <p>亲爱的用户，</p>
+        <p>这是最后的提醒！您的会员服务即将在 <strong>{{endDate}}</strong> 到期。</p>
+        
+        <div style="text-align: center; margin: 30px 0;">
+            <a href="{{renewUrl}}" class="btn-urgent">🔥 紧急续费</a>
+        </div>
+        
+        <h3>⚠️ 到期后将失去的功能：</h3>
+        <ul style="color: #dc3545;">
+            <li>❌ 多平台内容发布功能</li>
+            <li>❌ 消息聚合服务</li>
+            <li>❌ 优先客服支持</li>
+            <li>❌ 高级数据分析</li>
+        </ul>
+        
+        <div style="background: #d4edda; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <h4 style="color: #155724; margin: 0 0 10px 0;">💡 温馨提示</h4>
+            <p style="color: #155724; margin: 0;">现在续费，您的会员时间将在当前到期时间基础上延长，不会浪费剩余时间！</p>
+        </div>
+        
+        <p>如需帮助，请立即联系我们：</p>
+        <p>📞 客服热线：400-xxx-xxxx</p>
+        <p>💬 在线客服：<a href="{{contactUrl}}">点击联系</a></p>
+    </div>
+    
+    <div class="footer">
+        <p>此邮件由系统自动发送，请勿回复</p>
+    </div>
+</body>
+</html>

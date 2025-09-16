@@ -1,0 +1,128 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          Int      @id @default(autoincrement())
+  username    String?  @unique @db.VarChar(50)
+  phone       String?  @unique @db.VarChar(20)
+  email       String?  @unique @db.VarChar(100)
+  passwordHash String? @map("password_hash") @db.VarChar(255)
+  avatarUrl   String?  @map("avatar_url") @db.VarChar(255)
+  status      Int      @default(1) // 1:正常 0:禁用
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+  @@index([phone])
+  @@index([email])
+}
+
+model SmsCode {
+  id        Int      @id @default(autoincrement())
+  phone     String   @db.VarChar(20)
+  code      String   @db.VarChar(6)
+  used      Boolean  @default(false)
+  scene     String   @db.VarChar(20) // register, login, reset_password
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("sms_codes")
+  @@index([phone])
+  @@index([phone, scene])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    Int      @map("user_id")
+  token     String   @unique @db.VarChar(500)
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+  @@index([userId])
+}
+
+model LoginAttempt {
+  id         Int      @id @default(autoincrement())
+  identifier String   @db.VarChar(100) // phone or email
+  ip         String   @db.VarChar(45)
+  success    Boolean  @default(false)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@map("login_attempts")
+  @@index([identifier, createdAt])
+  @@index([ip, createdAt])
+}
+
+model Order {
+  id              Int      @id @default(autoincrement())
+  orderNo         String   @unique @map("order_no") @db.VarChar(32)
+  userId          Int      @map("user_id")
+  planId          String   @map("plan_id") @db.VarChar(20)
+  planName        String   @map("plan_name") @db.VarChar(50)
+  originalAmount  Decimal  @map("original_amount") @db.Decimal(10, 2)
+  discountAmount  Decimal  @default(0) @map("discount_amount") @db.Decimal(10, 2)
+  finalAmount     Decimal  @map("final_amount") @db.Decimal(10, 2)
+  paymentMethod   String?  @map("payment_method") @db.VarChar(20)
+  paymentStatus   Int      @default(0) @map("payment_status")
+  tradeNo         String?  @map("trade_no") @db.VarChar(64)
+  qrCodeUrl       String?  @map("qr_code_url") @db.VarChar(255)
+  expiresAt       DateTime @map("expires_at")
+  paidAt          DateTime? @map("paid_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  user            User     @relation(fields: [userId], references: [id])
+  callbacks       PaymentCallback[]
+  refunds         Refund[]
+
+  @@map("orders")
+  @@index([userId, paymentStatus], map: "idx_orders_user_status")
+  @@index([orderNo], map: "idx_orders_order_no")
+  @@index([tradeNo], map: "idx_orders_trade_no")
+  @@index([expiresAt], map: "idx_orders_expires_at")
+}
+
+model PaymentCallback {
+  id            Int      @id @default(autoincrement())
+  orderNo       String   @map("order_no") @db.VarChar(32)
+  paymentMethod String   @map("payment_method") @db.VarChar(20)
+  tradeNo       String?  @map("trade_no") @db.VarChar(64)
+  callbackData  Json     @map("callback_data")
+  signature     String?  @db.VarChar(255)
+  status        Int      @default(0)
+  processedAt   DateTime? @map("processed_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  order         Order    @relation(fields: [orderNo], references: [orderNo])
+
+  @@map("payment_callbacks")
+  @@index([orderNo], map: "idx_payment_callbacks_order_no")
+}
+
+model Refund {
+  id             Int      @id @default(autoincrement())
+  orderNo        String   @map("order_no") @db.VarChar(32)
+  refundNo       String   @unique @map("refund_no") @db.VarChar(32)
+  refundAmount   Decimal  @map("refund_amount") @db.Decimal(10, 2)
+  refundReason   String?  @map("refund_reason") @db.VarChar(255)
+  refundStatus   Int      @default(0) @map("refund_status")
+  tradeRefundNo  String?  @map("trade_refund_no") @db.VarChar(64)
+  refundedAt     DateTime? @map("refunded_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  order          Order    @relation(fields: [orderNo], references: [orderNo])
+
+  @@map("refunds")
+}

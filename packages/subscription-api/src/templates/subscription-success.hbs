@@ -1,0 +1,139 @@
+<!-- templates/subscription-success.hbs -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>订阅成功</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+            border-radius: 10px 10px 0 0;
+        }
+        .success-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+        .content {
+            background: #fff;
+            padding: 30px;
+            border: 1px solid #ddd;
+            border-top: none;
+        }
+        .success-box {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .btn {
+            display: inline-block;
+            background: #007bff;
+            color: white;
+            padding: 15px 30px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: bold;
+            margin: 10px 5px;
+        }
+        .btn-success {
+            background: #28a745;
+        }
+        .feature-list {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .feature-item {
+            padding: 10px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .feature-item:last-child {
+            border-bottom: none;
+        }
+        .footer {
+            background: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            border-radius: 0 0 10px 10px;
+            color: #666;
+            font-size: 12px;
+            border: 1px solid #ddd;
+            border-top: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="success-icon">🎉</div>
+        <h1>订阅成功！</h1>
+        <p>欢迎成为我们的会员</p>
+    </div>
+    
+    <div class="content">
+        <div class="success-box">
+            <h2 style="color: #155724; margin: 0 0 15px 0;">✅ 订阅已激活</h2>
+            <p style="color: #155724; margin: 0;">您的 <strong>{{planName}}</strong> 已成功激活！</p>
+            <p style="color: #155724; margin: 10px 0 0 0;">服务有效期至：<strong>{{endDate}}</strong></p>
+        </div>
+        
+        <h3>🌟 您现在可以享受以下功能：</h3>
+        <div class="feature-list">
+            <div class="feature-item">
+                <strong>📝 多平台内容发布</strong><br>
+                <small>支持微博、抖音、小红书等主流平台一键发布</small>
+            </div>
+            <div class="feature-item">
+                <strong>📱 消息聚合管理</strong><br>
+                <small>统一管理所有平台的私信、评论和互动</small>
+            </div>
+            <div class="feature-item">
+                <strong>🎯 数据分析报告</strong><br>
+                <small>详细的内容表现分析和粉丝增长追踪</small>
+            </div>
+            <div class="feature-item">
+                <strong>🔧 高级功能定制</strong><br>
+                <small>根据您的需求定制专属功能和工作流</small>
+            </div>
+        </div>
+        
+        <h3>🚀 立即开始使用</h3>
+        <div style="text-align: center;">
+            <a href="{{dashboardUrl}}" class="btn btn-success">进入控制台</a>
+            <a href="{{supportUrl}}" class="btn">使用帮助</a>
+        </div>
+        
+        <h3>💡 使用技巧</h3>
+        <ul>
+            <li>建议先完善账号绑定，连接您的社交媒体账号</li>
+            <li>可以设置定时发布，提高内容运营效率</li>
+            <li>使用模板功能，快速创建优质内容</li>
+            <li>关注数据面板，了解内容表现情况</li>
+        </ul>
+        
+        <p>如有任何问题，我们的客服团队随时为您服务！</p>
+        
+        <p>再次感谢您的信任与支持！</p>
+        <p><strong>{{@root.appName}} 团队</strong></p>
+    </div>
+    
+    <div class="footer">
+        <p>此邮件由系统自动发送，请勿回复</p>
+        <p>需要帮助？访问 <a href="{{supportUrl}}">帮助中心</a> 或联系客服</p>
+    </div>
+</body>
+</html>
