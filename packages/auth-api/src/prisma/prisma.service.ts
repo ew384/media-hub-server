@@ -1,27 +1,69 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+// packages/auth-api/src/prisma/prisma.service.ts
+import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { prisma } from '@media-hub/database';
 
 @Injectable()
-export class PrismaService extends PrismaClient implements OnModuleInit {
-  constructor() {
-    super({
-      log: ['query', 'info', 'warn', 'error'],
-      errorFormat: 'colorless',
-    });
-  }
+export class PrismaService implements OnModuleInit, OnModuleDestroy {
+  // 使用共享的prisma实例
+  private readonly client = prisma;
 
   async onModuleInit() {
     try {
-      await this.$connect();
-      console.log('✅ Database connected successfully');
+      // 连接已在共享数据库包中处理，这里进行健康检查
+      const isHealthy = await this.healthCheck();
+      if (isHealthy) {
+        console.log('✅ Auth API - Database connected successfully');
+      } else {
+        throw new Error('Database health check failed');
+      }
     } catch (error) {
-      console.error('❌ Database connection failed:', error);
+      console.error('❌ Auth API - Database connection failed:', error);
       throw error;
     }
   }
 
   async onModuleDestroy() {
-    await this.$disconnect();
+    // 断开连接由共享数据库包管理
+    console.log('🔌 Auth API - Database connection will be managed by shared database package');
+  }
+
+  // 提供对共享prisma客户端的访问
+  get $() {
+    return this.client;
+  }
+
+  // 为了兼容现有代码，暴露常用的模型访问器
+  get user() {
+    return this.client.user;
+  }
+
+  get smsCode() {
+    return this.client.smsCode;
+  }
+
+  get refreshToken() {
+    return this.client.refreshToken;
+  }
+
+  get loginAttempt() {
+    return this.client.loginAttempt;
+  }
+
+  // 保持原有的方法
+  async $connect() {
+    return this.client.$connect();
+  }
+
+  async $disconnect() {
+    return this.client.$disconnect();
+  }
+
+  async $queryRaw(query: any, ...values: any[]) {
+    return this.client.$queryRaw(query, ...values);
+  }
+
+  async $transaction<T>(fn: (prisma: typeof this.client) => Promise<T>): Promise<T> {
+    return await this.client.$transaction(fn);
   }
 
   /**
@@ -31,7 +73,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     const now = new Date();
     
     // 清理过期的短信验证码
-    await this.smsCode.deleteMany({
+    await this.client.smsCode.deleteMany({
       where: {
         expiresAt: {
           lt: now,
@@ -40,7 +82,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     });
 
     // 清理过期的刷新令牌
-    await this.refreshToken.deleteMany({
+    await this.client.refreshToken.deleteMany({
       where: {
         expiresAt: {
           lt: now,
@@ -50,7 +92,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
 
     // 清理过期的登录尝试记录（保留7天）
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    await this.loginAttempt.deleteMany({
+    await this.client.loginAttempt.deleteMany({
       where: {
         createdAt: {
           lt: sevenDaysAgo,
@@ -64,7 +106,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
    */
   async healthCheck(): Promise<boolean> {
     try {
-      await this.$queryRaw`SELECT 1`;
+      await this.client.$queryRaw`SELECT 1`;
       return true;
     } catch (error) {
       console.error('Database health check failed:', error);
