@@ -9,7 +9,9 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:reset": "prisma migrate reset",
-    "db:seed": "tsx src/seed.ts"
+    "db:seed": "tsx src/seed.ts",
+    "db:studio": "prisma studio",
+    "postinstall": "npm run db:generate"
   },
   "dependencies": {
     "@prisma/client": "^5.0.0"
@@ -17,6 +19,11 @@
   "devDependencies": {
     "prisma": "^5.0.0",
     "typescript": "^5.0.0",
-    "@types/node": "^20.0.0"
-  }
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0"
+  },
+  "files": [
+    "dist/**/*",
+    "prisma/schema.prisma"
+  ]
 }
