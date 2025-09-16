@@ -1,0 +1,54 @@
+services:
+  # PostgreSQL 数据库
+  postgres:
+    image: postgres:15-alpine
+    container_name: media-hub-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: media_hub_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_HOST_AUTH_METHOD: md5
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - media-hub-network
+
+  # Redis 缓存 - 使用6380端口避免冲突
+  redis:
+    image: redis:7-alpine
+    container_name: media-hub-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - media-hub-network
+
+  # 数据库管理工具
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: media-hub-pgadmin-dev
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_LISTEN_PORT: 80
+    ports:
+      - "8080:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - media-hub-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  pgadmin_data:
+
+networks:
+  media-hub-network:
+    driver: bridge
