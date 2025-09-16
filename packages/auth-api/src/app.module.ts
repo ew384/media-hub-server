@@ -2,8 +2,6 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { CacheModule } from '@nestjs/cache-manager';
-import { redisStore } from 'cache-manager-redis-store';
-import type { RedisClientOptions } from 'redis';
 
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
@@ -22,34 +20,24 @@ import { AppService } from './app.service';
     }),
 
     // 限流模块
-    ThrottlerModule.forRootAsync({
-      useFactory: () => ({
-        throttlers: [
-          {
-            ttl: parseInt(process.env.THROTTLE_TTL || '60') * 1000,
-            limit: parseInt(process.env.THROTTLE_LIMIT || '100'),
-          },
-        ],
-      }),
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          ttl: parseInt(process.env.THROTTLE_TTL || '60') * 1000,
+          limit: parseInt(process.env.THROTTLE_LIMIT || '100'),
+        },
+      ],
     }),
 
     // 缓存模块 (Redis)
-    CacheModule.registerAsync<RedisClientOptions>({
+    CacheModule.register({
       isGlobal: true,
-      useFactory: async () => {
-        const store = await redisStore({
-          socket: {
-            host: process.env.REDIS_HOST || 'localhost',
-            port: parseInt(process.env.REDIS_PORT || '6379'),
-          },
-          password: process.env.REDIS_PASSWORD || undefined,
-          database: parseInt(process.env.REDIS_DB || '0'),
-        });
-        return {
-          store: () => store,
-          ttl: 60 * 60 * 1000, // 1小时默认过期时间
-        };
-      },
+      store: 'redis',
+      host: process.env.REDIS_HOST || 'localhost',
+      port: parseInt(process.env.REDIS_PORT || '6379'),
+      password: process.env.REDIS_PASSWORD || undefined,
+      db: parseInt(process.env.REDIS_DB || '0'),
+      ttl: 60 * 60, // 1小时默认过期时间(秒)
     }),
 
     // 业务模块

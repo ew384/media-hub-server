@@ -2,7 +2,7 @@
   "name": "auth-server",
   "version": "1.0.0",
   "description": "自媒体多账号管理系统 - 用户认证服务",
-  "author": "Your Name",
+  "author": "Endian Wang",
   "private": true,
   "license": "MIT",
   "scripts": {
