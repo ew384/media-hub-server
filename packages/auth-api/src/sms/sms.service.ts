@@ -1,7 +1,8 @@
 import {
   Injectable,
   BadRequestException,
-  TooManyRequestsException,
+  HttpException,
+  HttpStatus,
   InternalServerErrorException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -131,7 +132,8 @@ export class SmsService {
     const ipCount = await this.cacheManager.get<number>(ipKey) || 0;
 
     if (phoneCount >= this.rateLimitPerMinute || ipCount >= this.rateLimitPerMinute) {
-      throw new TooManyRequestsException('发送过于频繁，请稍后再试');
+      // 修复：使用HttpException替代不存在的TooManyRequestsException
+      throw new HttpException('发送过于频繁，请稍后再试', HttpStatus.TOO_MANY_REQUESTS);
     }
   }
 
@@ -155,7 +157,8 @@ export class SmsService {
     });
 
     if (count >= this.dailyLimit) {
-      throw new TooManyRequestsException('今日发送次数已达上限');
+      // 修复：使用HttpException替代不存在的TooManyRequestsException
+      throw new HttpException('今日发送次数已达上限', HttpStatus.TOO_MANY_REQUESTS);
     }
   }
 

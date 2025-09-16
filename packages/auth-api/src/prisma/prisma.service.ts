@@ -1,7 +1,7 @@
 // packages/auth-api/src/prisma/prisma.service.ts
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { prisma } from '@media-hub/database';
-
+import type { PrismaClient } from '@media-hub/database';
 @Injectable()
 export class PrismaService implements OnModuleInit, OnModuleDestroy {
   // 使用共享的prisma实例
@@ -27,25 +27,25 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     console.log('🔌 Auth API - Database connection will be managed by shared database package');
   }
 
-  // 提供对共享prisma客户端的访问
-  get $() {
+  // 修复：添加明确的返回类型注解
+  get $(): PrismaClient {
     return this.client;
   }
 
-  // 为了兼容现有代码，暴露常用的模型访问器
-  get user() {
+  // 修复：为了兼容现有代码，暴露常用的模型访问器
+  get user(): PrismaClient['user'] {
     return this.client.user;
   }
 
-  get smsCode() {
+  get smsCode(): PrismaClient['smsCode'] {
     return this.client.smsCode;
   }
 
-  get refreshToken() {
+  get refreshToken(): PrismaClient['refreshToken'] {
     return this.client.refreshToken;
   }
 
-  get loginAttempt() {
+  get loginAttempt(): PrismaClient['loginAttempt'] {
     return this.client.loginAttempt;
   }
 
