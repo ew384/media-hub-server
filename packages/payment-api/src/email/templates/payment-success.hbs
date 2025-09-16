@@ -1,0 +1,39 @@
+<!-- src/email/templates/payment-success.hbs -->
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>支付成功通知</title>
+    <style>
+        .container { max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; }
+        .header { background: #4CAF50; color: white; padding: 20px; text-align: center; }
+        .content { padding: 20px; }
+        .footer { background: #f5f5f5; padding: 10px; text-align: center; font-size: 12px; }
+        .order-info { background: #f9f9f9; padding: 15px; margin: 15px 0; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>支付成功通知</h1>
+        </div>
+        <div class="content">
+            <p>亲爱的 {{username}}，</p>
+            <p>您的支付已经成功完成！</p>
+            
+            <div class="order-info">
+                <h3>订单详情</h3>
+                <p><strong>订单号：</strong>{{orderNo}}</p>
+                <p><strong>套餐名称：</strong>{{planName}}</p>
+                <p><strong>支付金额：</strong>¥{{amount}}</p>
+                <p><strong>有效期：</strong>{{duration}} 个月</p>
+            </div>
+            
+            <p>感谢您选择我们的服务！</p>
+        </div>
+        <div class="footer">
+            <p>如有疑问，请联系客服</p>
+        </div>
+    </div>
+</body>
+</html>
