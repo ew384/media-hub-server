@@ -18,6 +18,7 @@ import { SubscriptionService } from '../subscription/subscription.service';
 import { PermissionsService } from '../permissions/permissions.service';
 import { UpdateSubscriptionDto } from '../subscription/dto/update-subscription.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { AdminGuard } from './guards/admin.guard'; // 需要创建管理员权限守卫
 
 @ApiTags('admin')

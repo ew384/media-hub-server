@@ -1,27 +1,30 @@
 // src/subscription/dto/subscription-query.dto.ts
-import { IsOptional, IsNumber, IsString, IsIn, Min } from 'class-validator';
-import { Transform } from 'class-transformer';
-import { SubscriptionStatus } from '../constants/subscription.constants';
+import { IsOptional, IsNumber, IsString, Min } from 'class-validator';
+import { Type } from 'class-transformer';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class SubscriptionQueryDto {
+  @ApiProperty({ description: '页码', default: 1, required: false })
   @IsOptional()
-  @Transform(({ value }) => parseInt(value))
+  @Type(() => Number)
   @IsNumber()
   @Min(1)
-  page?: number = 1;
+  page?: number;
 
+  @ApiProperty({ description: '每页数量', default: 10, required: false })
   @IsOptional()
-  @Transform(({ value }) => parseInt(value))
+  @Type(() => Number)
   @IsNumber()
   @Min(1)
-  limit?: number = 10;
+  limit?: number;
 
+  @ApiProperty({ description: '状态过滤', required: false })
   @IsOptional()
-  @Transform(({ value }) => parseInt(value))
+  @Type(() => Number)
   @IsNumber()
-  @IsIn(Object.values(SubscriptionStatus))
   status?: number;
 
+  @ApiProperty({ description: '套餐ID过滤', required: false })
   @IsOptional()
   @IsString()
   planId?: string;

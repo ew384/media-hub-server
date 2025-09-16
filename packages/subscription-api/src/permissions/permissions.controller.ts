@@ -13,6 +13,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagg
 import { PermissionsService } from './permissions.service';
 import { CheckPermissionDto, BatchCheckPermissionDto } from './dto/check-permission.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 @ApiTags('permissions')
 @Controller('permissions')

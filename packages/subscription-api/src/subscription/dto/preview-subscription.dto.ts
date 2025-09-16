@@ -1,12 +1,13 @@
 // src/subscription/dto/preview-subscription.dto.ts
-import { IsString, IsIn, IsOptional, IsDateString } from 'class-validator';
-import { SUBSCRIPTION_PLANS } from '../constants/subscription.constants';
+import { IsString, IsOptional, IsDateString } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class PreviewSubscriptionDto {
+  @ApiProperty({ description: '套餐ID' })
   @IsString()
-  @IsIn(Object.keys(SUBSCRIPTION_PLANS))
   planId: string;
 
+  @ApiProperty({ description: '开始日期', required: false })
   @IsOptional()
   @IsDateString()
   startDate?: string;

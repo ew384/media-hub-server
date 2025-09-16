@@ -1,44 +1,46 @@
 // src/admin/admin.service.ts
-import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { User } from '../users/entities/user.entity';
-import { Subscription } from '../subscription/entities/subscription.entity';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { DatabaseService } from '../database/database.service';
+import { Subscription } from '@media-hub/database';
 
 @Injectable()
 export class AdminService {
   private readonly logger = new Logger(AdminService.name);
 
-  constructor(
-    @InjectRepository(User)
-    private userRepository: Repository<User>,
-    @InjectRepository(Subscription)
-    private subscriptionRepository: Repository<Subscription>,
-  ) {}
+  constructor(private readonly db: DatabaseService) {}
 
   /**
    * 获取用户概览信息
    */
   async getUserOverview(userId: number) {
-    const user = await this.userRepository.findOne({
+    const user = await this.db.user.findUnique({
       where: { id: userId },
-      select: ['id', 'email', 'username', 'createdAt', 'lastLoginAt']
+      select: { 
+        id: true, 
+        email: true, 
+        username: true, 
+        createdAt: true
+      }
     });
 
     if (!user) {
       throw new NotFoundException('用户不存在');
     }
 
-    const subscriptions = await this.subscriptionRepository.find({
+    const subscriptions = await this.db.subscription.findMany({
       where: { userId },
-      order: { createdAt: 'DESC' },
+      orderBy: { createdAt: 'desc' },
       take: 5
+    });
+
+    const totalSubscriptions = await this.db.subscription.count({
+      where: { userId }
     });
 
     return {
       user,
       subscriptions,
-      totalSubscriptions: subscriptions.length
+      totalSubscriptions
     };
   }
 
@@ -46,12 +48,128 @@ export class AdminService {
    * 批量操作用户订阅
    */
   async batchUpdateSubscriptions(userIds: number[], updates: Partial<Subscription>) {
-    const result = await this.subscriptionRepository.update(
-      { userId: In(userIds), status: SubscriptionStatus.ACTIVE },
-      updates
-    );
+    const result = await this.db.subscription.updateMany({
+      where: {
+        userId: { in: userIds },
+        status: 1 // ACTIVE
+      },
+      data: updates
+    });
 
-    this.logger.log(`Batch updated ${result.affected} subscriptions`);
-    return result.affected;
+    this.logger.log(`Batch updated ${result.count} subscriptions`);
+    return result.count;
+  }
+
+  /**
+   * 获取用户列表（管理员功能）
+   */
+  async getUsersList(page: number = 1, limit: number = 20, search?: string) {
+    const skip = (page - 1) * limit;
+    
+    const where = search ? {
+      OR: [
+        { username: { contains: search, mode: 'insensitive' as const } },
+        { email: { contains: search, mode: 'insensitive' as const } },
+        { phone: { contains: search, mode: 'insensitive' as const } }
+      ]
+    } : {};
+
+    const [users, total] = await Promise.all([
+      this.db.user.findMany({
+        where,
+        select: {
+          id: true,
+          username: true,
+          email: true,
+          phone: true,
+          status: true,
+          createdAt: true,
+          _count: {
+            select: {
+              subscriptions: {
+                where: { status: 1 }
+              }
+            }
+          }
+        },
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' }
+      }),
+      this.db.user.count({ where })
+    ]);
+
+    return {
+      users,
+      total,
+      page,
+      limit
+    };
+  }
+
+  /**
+   * 获取订阅统计数据（管理员仪表板）
+   */
+  async getDashboardStats() {
+    const [
+      totalUsers,
+      activeSubscriptions,
+      expiredSubscriptions,
+      monthlyRevenue
+    ] = await Promise.all([
+      this.db.user.count(),
+      this.db.subscription.count({ where: { status: 1 } }),
+      this.db.subscription.count({ where: { status: 0 } }),
+      this.getMonthlyRevenue()
+    ]);
+
+    return {
+      totalUsers,
+      activeSubscriptions,
+      expiredSubscriptions,
+      monthlyRevenue
+    };
+  }
+
+  /**
+   * 禁用/启用用户
+   */
+  async toggleUserStatus(userId: number): Promise<void> {
+    const user = await this.db.user.findUnique({
+      where: { id: userId },
+      select: { status: true }
+    });
+
+    if (!user) {
+      throw new NotFoundException('用户不存在');
+    }
+
+    const newStatus = user.status === 1 ? 0 : 1;
+    
+    await this.db.user.update({
+      where: { id: userId },
+      data: { status: newStatus }
+    });
+
+    this.logger.log(`User ${userId} status changed to ${newStatus ? 'active' : 'disabled'}`);
+  }
+
+  private async getMonthlyRevenue(): Promise<number> {
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const result = await this.db.subscription.aggregate({
+      where: {
+        createdAt: {
+          gte: startOfMonth
+        }
+      },
+      _sum: {
+        paidPrice: true
+      }
+    });
+
+    return parseFloat(result._sum.paidPrice?.toString() || '0');
   }
 }

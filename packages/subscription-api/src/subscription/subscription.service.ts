@@ -1,9 +1,7 @@
 // src/subscription/subscription.service.ts
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThan, LessThan } from 'typeorm';
-import { Subscription } from './entities/subscription.entity';
-import { SubscriptionFeature } from './entities/subscription-feature.entity';
+import { DatabaseService } from '../database/database.service';
+import { Subscription } from '@media-hub/database';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
 import { PreviewSubscriptionDto } from './dto/preview-subscription.dto';
@@ -26,12 +24,7 @@ import {
 export class SubscriptionService {
   private readonly logger = new Logger(SubscriptionService.name);
 
-  constructor(
-    @InjectRepository(Subscription)
-    private subscriptionRepository: Repository<Subscription>,
-    @InjectRepository(SubscriptionFeature)
-    private featureRepository: Repository<SubscriptionFeature>,
-  ) {}
+  constructor(private readonly db: DatabaseService) {}
 
   /**
    * 获取所有套餐列表
@@ -64,22 +57,22 @@ export class SubscriptionService {
     const startDate = createDto.startDate ? new Date(createDto.startDate) : new Date();
     const endDate = this.calculateEndDate(startDate, plan.duration, plan.unit);
 
-    const subscription = this.subscriptionRepository.create({
-      userId,
-      planId: createDto.planId,
-      planName: plan.name,
-      originalPrice: plan.price,
-      paidPrice: createDto.paidPrice,
-      startDate,
-      endDate,
-      status: SubscriptionStatus.ACTIVE,
-      autoRenew: createDto.autoRenew
+    const subscription = await this.db.subscription.create({
+      data: {
+        userId,
+        planId: createDto.planId,
+        planName: plan.name,
+        originalPrice: plan.price,
+        paidPrice: createDto.paidPrice,
+        startDate,
+        endDate,
+        status: SubscriptionStatus.ACTIVE,
+        autoRenew: createDto.autoRenew
+      }
     });
 
-    const saved = await this.subscriptionRepository.save(subscription);
     this.logger.log(`Created subscription for user ${userId}: ${createDto.planId}`);
-    
-    return saved;
+    return subscription;
   }
 
   /**
@@ -88,7 +81,7 @@ export class SubscriptionService {
   async getSubscriptionStatus(userId: number): Promise<SubscriptionStatusResponse> {
     const subscription = await this.getActiveSubscription(userId);
     
-    if (!subscription || !subscription.isActive) {
+    if (!subscription || !this.isSubscriptionActive(subscription)) {
       return {
         isActive: false,
         planId: null,
@@ -102,9 +95,9 @@ export class SubscriptionService {
       };
     }
 
-    const plan = SUBSCRIPTION_PLANS[subscription.planId];
     const permissions = this.getPlanPermissions(subscription.planId);
     const features = this.getPlanFeatures(subscription.planId);
+    const remainingDays = this.calculateRemainingDays(subscription.endDate);
 
     return {
       isActive: true,
@@ -112,7 +105,7 @@ export class SubscriptionService {
       planName: subscription.planName,
       startDate: subscription.startDate,
       endDate: subscription.endDate,
-      remainingDays: subscription.remainingDays,
+      remainingDays,
       autoRenew: subscription.autoRenew,
       permissions,
       features
@@ -133,7 +126,7 @@ export class SubscriptionService {
     
     // 计算折扣价格
     const originalPrice = plan.price;
-    const discount = plan.discount;
+    const discount = plan.discount || 0;
     const finalPrice = originalPrice * (1 - discount / 100);
 
     return {
@@ -162,31 +155,33 @@ export class SubscriptionService {
     const { page = 1, limit = 10, status, planId } = query;
     const skip = (page - 1) * limit;
 
-    const queryBuilder = this.subscriptionRepository
-      .createQueryBuilder('subscription')
-      .where('subscription.userId = :userId', { userId })
-      .orderBy('subscription.createdAt', 'DESC');
-
+    const where: any = { userId };
+    
     if (status !== undefined) {
-      queryBuilder.andWhere('subscription.status = :status', { status });
+      where.status = status;
     }
-
+    
     if (planId) {
-      queryBuilder.andWhere('subscription.planId = :planId', { planId });
+      where.planId = planId;
     }
 
-    const [subscriptions, total] = await queryBuilder
-      .skip(skip)
-      .take(limit)
-      .getManyAndCount();
+    const [subscriptions, total] = await Promise.all([
+      this.db.subscription.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.db.subscription.count({ where })
+    ]);
 
     return {
       subscriptions: subscriptions.map(sub => ({
         id: sub.id,
         planId: sub.planId,
         planName: sub.planName,
-        originalPrice: sub.originalPrice,
-        paidPrice: sub.paidPrice,
+        originalPrice: parseFloat(sub.originalPrice.toString()), // 转换 Decimal 为 number
+        paidPrice: parseFloat(sub.paidPrice.toString()), // 转换 Decimal 为 number
         startDate: sub.startDate,
         endDate: sub.endDate,
         status: sub.status,
@@ -207,7 +202,11 @@ export class SubscriptionService {
       throw new NotFoundException('No active subscription found');
     }
 
-    await this.subscriptionRepository.update(subscription.id, { autoRenew: false });
+    await this.db.subscription.update({
+      where: { id: subscription.id },
+      data: { autoRenew: false }
+    });
+    
     this.logger.log(`Cancelled auto-renew for user ${userId}`);
   }
 
@@ -220,7 +219,11 @@ export class SubscriptionService {
       throw new NotFoundException('No active subscription found');
     }
 
-    await this.subscriptionRepository.update(subscription.id, { autoRenew: true });
+    await this.db.subscription.update({
+      where: { id: subscription.id },
+      data: { autoRenew: true }
+    });
+    
     this.logger.log(`Resumed auto-renew for user ${userId}`);
   }
 
@@ -231,13 +234,20 @@ export class SubscriptionService {
     const futureDate = new Date();
     futureDate.setDate(futureDate.getDate() + days);
 
-    const subscriptions = await this.subscriptionRepository
-      .createQueryBuilder('subscription')
-      .leftJoinAndSelect('subscription.user', 'user')
-      .where('subscription.status = :status', { status: SubscriptionStatus.ACTIVE })
-      .andWhere('subscription.endDate <= :futureDate', { futureDate })
-      .andWhere('subscription.endDate > :now', { now: new Date() })
-      .getMany();
+    const subscriptions = await this.db.subscription.findMany({
+      where: {
+        status: SubscriptionStatus.ACTIVE,
+        endDate: {
+          lte: futureDate,
+          gt: new Date()
+        }
+      },
+      include: {
+        user: {
+          select: { email: true }
+        }
+      }
+    });
 
     return subscriptions.map(sub => ({
       id: sub.id,
@@ -245,7 +255,7 @@ export class SubscriptionService {
       planId: sub.planId,
       planName: sub.planName,
       endDate: sub.endDate,
-      remainingDays: sub.remainingDays,
+      remainingDays: this.calculateRemainingDays(sub.endDate),
       userEmail: sub.user?.email,
       autoRenew: sub.autoRenew
     }));
@@ -255,31 +265,27 @@ export class SubscriptionService {
    * 处理过期订阅
    */
   async handleExpiredSubscriptions(): Promise<number> {
-    const expiredSubscriptions = await this.subscriptionRepository.find({
+    const result = await this.db.subscription.updateMany({
       where: {
         status: SubscriptionStatus.ACTIVE,
-        endDate: LessThan(new Date())
+        endDate: {
+          lt: new Date()
+        }
+      },
+      data: {
+        status: SubscriptionStatus.EXPIRED
       }
     });
 
-    if (expiredSubscriptions.length === 0) {
-      return 0;
-    }
-
-    await this.subscriptionRepository.update(
-      { id: In(expiredSubscriptions.map(s => s.id)) },
-      { status: SubscriptionStatus.EXPIRED }
-    );
-
-    this.logger.log(`Processed ${expiredSubscriptions.length} expired subscriptions`);
-    return expiredSubscriptions.length;
+    this.logger.log(`Processed ${result.count} expired subscriptions`);
+    return result.count;
   }
 
   /**
    * 管理员：手动修改用户订阅状态
    */
   async updateSubscriptionByAdmin(userId: number, updateDto: UpdateSubscriptionDto): Promise<Subscription> {
-    const subscription = await this.subscriptionRepository.findOne({
+    const subscription = await this.db.subscription.findFirst({
       where: { userId, status: SubscriptionStatus.ACTIVE }
     });
 
@@ -287,8 +293,10 @@ export class SubscriptionService {
       throw new NotFoundException('No active subscription found for user');
     }
 
-    Object.assign(subscription, updateDto);
-    const updated = await this.subscriptionRepository.save(subscription);
+    const updated = await this.db.subscription.update({
+      where: { id: subscription.id },
+      data: updateDto
+    });
     
     this.logger.log(`Admin updated subscription for user ${userId}`);
     return updated;
@@ -298,7 +306,7 @@ export class SubscriptionService {
    * 管理员：延长会员时间
    */
   async extendSubscription(userId: number, days: number): Promise<Subscription> {
-    const subscription = await this.subscriptionRepository.findOne({
+    const subscription = await this.db.subscription.findFirst({
       where: { userId, status: SubscriptionStatus.ACTIVE }
     });
 
@@ -309,8 +317,10 @@ export class SubscriptionService {
     const newEndDate = new Date(subscription.endDate);
     newEndDate.setDate(newEndDate.getDate() + days);
 
-    subscription.endDate = newEndDate;
-    const updated = await this.subscriptionRepository.save(subscription);
+    const updated = await this.db.subscription.update({
+      where: { id: subscription.id },
+      data: { endDate: newEndDate }
+    });
     
     this.logger.log(`Extended subscription for user ${userId} by ${days} days`);
     return updated;
@@ -320,52 +330,37 @@ export class SubscriptionService {
    * 获取订阅统计数据
    */
   async getSubscriptionStats(): Promise<SubscriptionStats> {
-    const totalActive = await this.subscriptionRepository.count({
-      where: { status: SubscriptionStatus.ACTIVE }
-    });
-
-    const totalExpired = await this.subscriptionRepository.count({
-      where: { status: SubscriptionStatus.EXPIRED }
-    });
-
-    // 获取套餐分布
-    const planDistribution = await this.subscriptionRepository
-      .createQueryBuilder('subscription')
-      .select('subscription.planId', 'planId')
-      .addSelect('COUNT(*)', 'count')
-      .where('subscription.status = :status', { status: SubscriptionStatus.ACTIVE })
-      .groupBy('subscription.planId')
-      .getRawMany();
+    const [totalActive, totalExpired, planDistribution, monthlyRevenue, autoRenewCount] = await Promise.all([
+      this.db.subscription.count({
+        where: { status: SubscriptionStatus.ACTIVE }
+      }),
+      this.db.subscription.count({
+        where: { status: SubscriptionStatus.EXPIRED }
+      }),
+      this.db.subscription.groupBy({
+        by: ['planId'],
+        where: { status: SubscriptionStatus.ACTIVE },
+        _count: { planId: true }
+      }),
+      this.getMonthlyRevenue(),
+      this.db.subscription.count({
+        where: { status: SubscriptionStatus.ACTIVE, autoRenew: true }
+      })
+    ]);
 
     const planDistributionMap = planDistribution.reduce((acc, item) => {
-      acc[item.planId] = parseInt(item.count);
+      acc[item.planId] = item._count.planId;
       return acc;
-    }, {});
-
-    // 计算月收入（当月新订阅）
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
-    startOfMonth.setHours(0, 0, 0, 0);
-
-    const monthlyRevenue = await this.subscriptionRepository
-      .createQueryBuilder('subscription')
-      .select('SUM(subscription.paidPrice)', 'revenue')
-      .where('subscription.createdAt >= :startOfMonth', { startOfMonth })
-      .getRawOne();
+    }, {} as Record<string, number>);
 
     // 即将过期数量（7天内）
     const expiringSubscriptions = await this.getExpiringSubscriptions(7);
-
-    // 自动续费比例
-    const autoRenewCount = await this.subscriptionRepository.count({
-      where: { status: SubscriptionStatus.ACTIVE, autoRenew: true }
-    });
 
     return {
       totalActiveSubscriptions: totalActive,
       totalExpiredSubscriptions: totalExpired,
       planDistribution: planDistributionMap,
-      monthlyRevenue: parseFloat(monthlyRevenue?.revenue || '0'),
+      monthlyRevenue: monthlyRevenue,
       expiringInWeek: expiringSubscriptions.length,
       autoRenewRate: totalActive > 0 ? (autoRenewCount / totalActive) * 100 : 0
     };
@@ -374,13 +369,34 @@ export class SubscriptionService {
   // 私有辅助方法
 
   private async getActiveSubscription(userId: number): Promise<Subscription | null> {
-    return this.subscriptionRepository.findOne({
+    return this.db.subscription.findFirst({
       where: {
         userId,
         status: SubscriptionStatus.ACTIVE,
-        endDate: MoreThan(new Date())
+        endDate: {
+          gt: new Date()
+        }
       }
     });
+  }
+
+  private async getMonthlyRevenue(): Promise<number> {
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const result = await this.db.subscription.aggregate({
+      where: {
+        createdAt: {
+          gte: startOfMonth
+        }
+      },
+      _sum: {
+        paidPrice: true
+      }
+    });
+
+    return parseFloat(result._sum.paidPrice?.toString() || '0');
   }
 
   private calculateEndDate(startDate: Date, duration: number, unit: 'month' | 'year'): Date {
@@ -393,6 +409,16 @@ export class SubscriptionService {
     }
     
     return endDate;
+  }
+
+  private calculateRemainingDays(endDate: Date): number {
+    const now = new Date();
+    const diff = endDate.getTime() - now.getTime();
+    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+  }
+
+  private isSubscriptionActive(subscription: Subscription): boolean {
+    return subscription.status === SubscriptionStatus.ACTIVE && subscription.endDate > new Date();
   }
 
   private getPlanPermissions(planId: string): string[] {

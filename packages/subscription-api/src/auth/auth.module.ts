@@ -1,14 +1,11 @@
-// src/subscription/subscription.module.ts
+// src/auth/auth.module.ts
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { SubscriptionController } from './subscription.controller';
-import { SubscriptionService } from './subscription.service';
-import { DatabaseModule } from '../database/database.module';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
 @Module({
   imports: [
-    DatabaseModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
@@ -18,8 +15,7 @@ import { DatabaseModule } from '../database/database.module';
       inject: [ConfigService],
     }),
   ],
-  controllers: [SubscriptionController],
-  providers: [SubscriptionService],
-  exports: [SubscriptionService]
+  providers: [JwtAuthGuard],
+  exports: [JwtAuthGuard, JwtModule]
 })
-export class SubscriptionModule {}
+export class AuthModule {}

@@ -1,17 +1,25 @@
 // src/admin/admin.module.ts
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
+import { JwtModule } from '@nestjs/jwt';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { AdminGuard } from './guards/admin.guard';
-import { User } from '../users/entities/user.entity';
-import { Subscription } from '../subscription/entities/subscription.entity';
+import { DatabaseModule } from '../database/database.module';
 import { SubscriptionModule } from '../subscription/subscription.module';
 import { PermissionsModule } from '../permissions/permissions.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Subscription]),
+    DatabaseModule,
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      useFactory: async (configService: ConfigService) => ({
+        secret: configService.get('JWT_SECRET'),
+        signOptions: { expiresIn: '24h' },
+      }),
+      inject: [ConfigService],
+    }),
     SubscriptionModule,
     PermissionsModule
   ],

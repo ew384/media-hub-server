@@ -1,10 +1,8 @@
 // src/notification/notification.service.ts
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
-import { MailerService } from '@nestjs-modules/mailer'; // 需要安装邮件模块
-import { NotificationRecord } from './entities/notification-record.entity';
+import { MailerService } from '@nestjs-modules/mailer';
+import { DatabaseService } from '../database/database.service';
 import { ExpiringSubscription, SubscriptionStats } from '../subscription/interfaces/subscription.interface';
 
 interface ExpiryReminderData {
@@ -21,13 +19,22 @@ interface WeeklyReportData {
   timestamp: Date;
 }
 
+interface NotificationRecord {
+  userId: number;
+  type: string;
+  content: string;
+  channel: string;
+  status: string;
+  referenceId?: string;
+  sentAt?: Date;
+}
+
 @Injectable()
 export class NotificationService {
   private readonly logger = new Logger(NotificationService.name);
 
   constructor(
-    @InjectRepository(NotificationRecord)
-    private notificationRepository: Repository<NotificationRecord>,
+    private readonly db: DatabaseService,
     private mailerService: MailerService,
     private configService: ConfigService,
   ) {}
@@ -52,6 +59,9 @@ export class NotificationService {
           renewUrl: `${this.configService.get('FRONTEND_URL')}/subscription/renew`
         }
       });
+
+      // 记录通知
+      await this.recordNotification(data.userId, 'expiry_reminder', subject);
 
       this.logger.log(`发送到期提醒邮件成功 - 用户 ${data.userId}`);
 
@@ -80,6 +90,8 @@ export class NotificationService {
           contactUrl: `${this.configService.get('FRONTEND_URL')}/contact`
         }
       });
+
+      await this.recordNotification(subscription.userId, 'urgent_expiry_reminder', subject, 'email', subscription.id.toString());
 
       this.logger.log(`发送紧急到期提醒成功 - 用户 ${subscription.userId}`);
 
@@ -159,39 +171,43 @@ export class NotificationService {
   }
 
   /**
-   * 检查是否已发送提醒
+   * 检查是否已发送提醒（基于时间的简单检查，因为没有专门的通知记录表）
    */
   async checkReminderSent(userId: number, subscriptionId: number, type: string): Promise<boolean> {
-    const record = await this.notificationRepository.findOne({
-      where: {
-        userId,
-        type,
-        referenceId: subscriptionId.toString(),
-        createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000) // 24小时内
-      }
-    });
-
-    return !!record;
+    // 由于原 schema 没有通知记录表，我们使用简单的时间检查
+    // 这里可以后续优化，添加专门的通知记录表
+    return false; // 暂时总是允许发送
   }
 
   /**
    * 标记提醒已发送
    */
   async markReminderSent(userId: number, subscriptionId: number, type: string): Promise<void> {
-    const record = this.notificationRepository.create({
+    await this.recordNotification(
       userId,
       type,
-      referenceId: subscriptionId.toString(),
-      content: `提醒已发送: ${type}`,
-      channel: 'email',
-      status: 'sent'
-    });
-
-    await this.notificationRepository.save(record);
+      `提醒已发送: ${type}`,
+      'email',
+      subscriptionId.toString()
+    );
   }
 
   /**
-   * 记录通知
+   * 获取用户的通知历史
+   */
+  async getUserNotifications(userId: number, page: number = 1, limit: number = 20) {
+    // 由于没有专门的通知表，这里返回空数组
+    // 后续可以考虑添加通知记录表到 schema 中
+    return {
+      notifications: [],
+      total: 0,
+      page,
+      limit
+    };
+  }
+
+  /**
+   * 记录通知（存储到日志或简单记录）
    */
   private async recordNotification(
     userId: number, 
@@ -201,17 +217,19 @@ export class NotificationService {
     referenceId?: string
   ): Promise<void> {
     try {
-      const record = this.notificationRepository.create({
+      // 由于原 schema 中没有 notification_records 表
+      // 这里只做日志记录，后续可以添加表结构
+      const record: NotificationRecord = {
         userId,
         type,
         content,
         channel,
-        referenceId,
         status: 'sent',
+        referenceId,
         sentAt: new Date()
-      });
+      };
 
-      await this.notificationRepository.save(record);
+      this.logger.log(`Notification recorded: ${JSON.stringify(record)}`);
     } catch (error) {
       this.logger.error('记录通知失败:', error);
     }
