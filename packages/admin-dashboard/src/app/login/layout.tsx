@@ -1,31 +1,18 @@
+// 解决方案1: 修复 login/layout.tsx - 移除自动重定向
+// packages/admin-dashboard/src/app/login/layout.tsx
+
 'use client';
 
-import React, { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import React from 'react';
 import { ConfigProvider, theme } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
-import { useAuthStore } from '@/stores/auth';
 
 export default function AuthLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const router = useRouter();
-  const { isAuthenticated, initialize } = useAuthStore();
-
-  // 初始化认证状态
-  useEffect(() => {
-    initialize();
-  }, [initialize]);
-
-  // 如果已登录，重定向到仪表板
-  useEffect(() => {
-    if (isAuthenticated) {
-      router.replace('/dashboard');
-    }
-  }, [isAuthenticated, router]);
-
+  // 移除所有认证检查和重定向逻辑，让登录页面简单显示
   return (
     <ConfigProvider
       locale={zhCN}

@@ -1,4 +1,4 @@
-// packages/admin-dashboard/src/app/login/page.tsx
+// packages/admin-dashboard/src/app/login/page.tsx - 添加调试版本
 'use client';
 
 import React, { useState } from 'react';
@@ -11,16 +11,33 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [form] = Form.useForm();
   const router = useRouter();
-  const { login } = useAuthStore();
+  const { login, isAuthenticated } = useAuthStore();
 
   const handleLogin = async (values: { username: string; password: string }) => {
     setLoading(true);
     try {
+      console.log('🔐 提交登录:', values);
       await login(values);
+      
+      console.log('✅ 登录成功，检查认证状态...');
+      console.log('认证状态:', isAuthenticated);
+      
       message.success('登录成功！');
-      router.push('/dashboard');
+      
+      // 短暂延迟确保状态更新
+      setTimeout(() => {
+        console.log('🔄 跳转到 dashboard...');
+        router.push('/dashboard');
+      }, 500);
+      
     } catch (error: any) {
-      console.error('Login error:', error);
+      console.error('❌ 登录错误:', error);
+      console.error('错误详情:', {
+        message: error.message,
+        response: error.response,
+        stack: error.stack
+      });
+      
       message.error(error.message || '登录失败，请检查用户名和密码');
     } finally {
       setLoading(false);
@@ -48,6 +65,9 @@ export default function LoginPage() {
               <div>
                 <p>用户名: <strong>admin</strong></p>
                 <p>密码: <strong>password</strong></p>
+                <p className="text-xs text-gray-500 mt-2">
+                  打开浏览器控制台可查看详细登录日志
+                </p>
               </div>
             }
             type="info"

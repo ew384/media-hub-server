@@ -1,3 +1,5 @@
+// packages/admin-dashboard/src/app/dashboard/page.tsx - 修复图表配置
+
 'use client';
 
 import React, { useEffect, useState } from 'react';
@@ -205,47 +207,69 @@ export default function DashboardPage() {
   // 使用模拟数据或真实数据
   const currentStats = stats || mockStats;
 
-  // 套餐分布图表数据
+  // 套餐分布图表数据 - 修复配置
   const planDistributionData = [
     { type: '月度套餐', value: currentStats.subscriptions.planDistribution.monthly },
     { type: '季度套餐', value: currentStats.subscriptions.planDistribution.quarterly },
     { type: '年度套餐', value: currentStats.subscriptions.planDistribution.yearly },
   ];
 
+  // 修复后的饼图配置
   const planDistributionConfig = {
     data: planDistributionData,
     angleField: 'value',
     colorField: 'type',
     radius: 0.8,
+    innerRadius: 0.4, // 使用环形图
     label: {
-      type: 'outer',
-      content: '{name}: {percentage}%',
+      type: 'spider', // 修复：使用 spider 而不是 outer
+      labelHeight: 28,
+      content: '{name}\n{percentage}%',
     },
-    legend: {
-      position: 'bottom' as const,
-    },
+    interactions: [
+      {
+        type: 'element-selected',
+      },
+      {
+        type: 'element-active',
+      },
+    ],
     color: ['#1890ff', '#52c41a', '#faad14'],
+    legend: {
+      position: 'bottom',
+    },
   };
 
-  // 支付方式分布图表数据
+  // 支付方式分布图表数据 - 修复配置
   const paymentMethodData = [
     { type: '支付宝', value: currentStats.payments.methodDistribution.alipay },
     { type: '微信支付', value: currentStats.payments.methodDistribution.wechat },
   ];
 
+  // 修复后的饼图配置
   const paymentMethodConfig = {
     data: paymentMethodData,
     angleField: 'value',
     colorField: 'type',
     radius: 0.8,
+    innerRadius: 0.4, // 使用环形图
     label: {
-      type: 'outer',
-      content: '{name}: {percentage}%',
+      type: 'spider', // 修复：使用 spider 而不是 outer
+      labelHeight: 28,
+      content: '{name}\n{percentage}%',
     },
-    legend: {
-      position: 'bottom' as const,
-    },
+    interactions: [
+      {
+        type: 'element-selected',
+      },
+      {
+        type: 'element-active',
+      },
+    ],
     color: ['#1890ff', '#52c41a'],
+    legend: {
+      position: 'bottom',
+    },
   };
 
   if (error) {
@@ -389,7 +413,9 @@ export default function DashboardPage() {
                 </Text>
               </div>
               <div className="pt-2 border-t">
-                <Pie {...planDistributionConfig} height={200} />
+                <div style={{ height: '200px' }}>
+                  <Pie {...planDistributionConfig} height={200} />
+                </div>
               </div>
             </div>
           </Card>
@@ -427,7 +453,9 @@ export default function DashboardPage() {
         
         <Col xs={24} lg={8}>
           <Card title="支付方式分布" className="card-shadow">
-            <Pie {...paymentMethodConfig} height={200} />
+            <div style={{ height: '200px' }}>
+              <Pie {...paymentMethodConfig} height={200} />
+            </div>
           </Card>
         </Col>
       </Row>

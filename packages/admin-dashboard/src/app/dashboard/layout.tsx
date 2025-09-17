@@ -1,3 +1,6 @@
+// 解决方案2: 修复 dashboard/layout.tsx - 改进认证检查逻辑
+// packages/admin-dashboard/src/app/dashboard/layout.tsx
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -88,28 +91,64 @@ export default function DashboardLayout({
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [isInitialized, setIsInitialized] = useState(false);
   
   const router = useRouter();
   const pathname = usePathname();
   
   const { user, isAuthenticated, logout, initialize, checkPermission } = useAuthStore();
 
-  // 初始化
+  // 初始化认证状态 - 修复版本
   useEffect(() => {
+    let isMounted = true;
+    
     const init = async () => {
-      await initialize();
-      setLoading(false);
+      console.log('🚀 Dashboard Layout: 开始初始化认证状态...');
+      
+      try {
+        await initialize();
+        if (isMounted) {
+          setIsInitialized(true);
+          console.log('✅ Dashboard Layout: 初始化完成');
+        }
+      } catch (error) {
+        console.error('❌ Dashboard Layout: 初始化失败:', error);
+        if (isMounted) {
+          setIsInitialized(true);
+        }
+      }
     };
+    
     init();
+    
+    return () => {
+      isMounted = false;
+    };
   }, [initialize]);
 
-  // 检查认证状态
+  // 认证检查 - 修复版本，添加防抖
   useEffect(() => {
-    if (!loading && !isAuthenticated) {
-      router.replace('/login');
-    }
-  }, [isAuthenticated, loading, router]);
+    if (!isInitialized) return;
+    
+    console.log('🔍 Dashboard Layout: 检查认证状态...', { 
+      isInitialized, 
+      isAuthenticated, 
+      hasUser: !!user,
+      pathname 
+    });
+    
+    // 添加延迟，避免状态更新冲突
+    const timer = setTimeout(() => {
+      if (!isAuthenticated) {
+        console.log('⚠️ Dashboard Layout: 未认证，重定向到登录页');
+        router.replace('/login');
+      } else {
+        console.log('✅ Dashboard Layout: 认证通过');
+      }
+    }, 100);
+    
+    return () => clearTimeout(timer);
+  }, [isInitialized, isAuthenticated, user, router, pathname]);
 
   // 恢复主题设置
   useEffect(() => {
@@ -143,10 +182,14 @@ export default function DashboardLayout({
   // 处理登出
   const handleLogout = async () => {
     try {
+      console.log('🚪 开始登出...');
       await logout();
+      console.log('✅ 登出成功，重定向到登录页');
       router.replace('/login');
     } catch (error) {
-      console.error('Logout error:', error);
+      console.error('❌ 登出错误:', error);
+      // 即使登出失败也要清除本地状态
+      router.replace('/login');
     }
   };
 
@@ -203,16 +246,22 @@ export default function DashboardLayout({
     onClick: handleUserMenuClick,
   };
 
-  if (loading) {
+  // 加载中状态
+  if (!isInitialized) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <Spin size="large" />
+        <Spin size="large" tip="正在加载..." />
       </div>
     );
   }
 
+  // 未认证状态 - 不渲染内容，等待重定向
   if (!isAuthenticated) {
-    return null;
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Spin size="large" tip="正在验证身份..." />
+      </div>
+    );
   }
 
   return (
