@@ -10,7 +10,7 @@ export class EmailService {
   private transporter: nodemailer.Transporter;
 
   constructor() {
-    this.transporter = nodemailer.createTransporter({
+    this.transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
       port: parseInt(process.env.SMTP_PORT) || 587,
       secure: false,
@@ -47,5 +47,33 @@ export class EmailService {
       this.logger.error('Failed to send email:', error);
       throw error;
     }
+  }
+
+  // 为了兼容 payment.service.ts 中的调用，添加这些方法
+  async sendPaymentSuccessEmail(to: string, data: {
+    orderNo: string;
+    planName: string;
+    amount: number;
+    paidAt: Date;
+  }) {
+    await this.sendEmail({
+      to,
+      subject: '支付成功通知',
+      template: 'payment-success',
+      context: data,
+    });
+  }
+
+  async sendRefundNotificationEmail(to: string, data: {
+    orderNo: string;
+    refundAmount: number;
+    refundReason?: string;
+  }) {
+    await this.sendEmail({
+      to,
+      subject: '退款通知',
+      template: 'refund-notification',
+      context: data,
+    });
   }
 }

@@ -29,7 +29,6 @@ import { EmailModule } from '../email/email.module';
     HttpModule.register({
       timeout: 10000,
       maxRedirects: 5,
-      retries: 3,
     }),
     ScheduleModule.forRoot(),
     BullModule.registerQueue({

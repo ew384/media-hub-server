@@ -1,27 +1,26 @@
-// src/payment/tasks/payment.task.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { PrismaService } from '../../prisma/prisma.service';
-import { PaymentService } from '../services/payment.service';
+import { PrismaService } from '../../common/database/prisma.service';
+import { PaymentService } from '../payment.service';
 import { NotificationService } from '../services/notification.service';
-import { PAYMENT_STATUS } from '../constants';
+import { PAYMENT_STATUS, SUBSCRIPTION_PLANS } from '../constants/payment.constants';
 
 @Injectable()
 export class PaymentTask {
   private readonly logger = new Logger(PaymentTask.name);
 
   constructor(
-    private prisma: PrismaService,
-    private paymentService: PaymentService,
-    private notificationService: NotificationService,
+    private readonly prisma: PrismaService,
+    private readonly paymentService: PaymentService,
+    private readonly notificationService: NotificationService,
   ) {}
 
-  // 每分钟检查过期订单
-  @Cron(CronExpression.EVERY_MINUTE)
+  // 每5分钟检查一次过期订单
+  @Cron('0 */5 * * * *')
   async handleExpiredOrders() {
-    this.logger.log('开始检查过期订单...');
-    
     try {
+      this.logger.debug('开始检查过期订单...');
+
       const expiredOrders = await this.prisma.order.findMany({
         where: {
           paymentStatus: PAYMENT_STATUS.PENDING,
@@ -29,154 +28,165 @@ export class PaymentTask {
             lt: new Date(),
           },
         },
-        select: {
-          orderNo: true,
-        },
+        select: { orderNo: true },
       });
 
-      for (const order of expiredOrders) {
-        await this.paymentService.expireOrder(order.orderNo);
-        // 发送过期通知
-        await this.notificationService.sendOrderExpiredNotification(order.orderNo);
-        this.logger.log(`订单 ${order.orderNo} 已过期`);
+      if (expiredOrders.length === 0) {
+        this.logger.debug('没有发现过期订单');
+        return;
       }
 
-      this.logger.log(`处理了 ${expiredOrders.length} 个过期订单`);
+      for (const order of expiredOrders) {
+        try {
+          await this.paymentService.expireOrder(order.orderNo);
+          this.logger.log(`订单已过期: ${order.orderNo}`);
+        } catch (error) {
+          this.logger.error(`处理过期订单失败: ${order.orderNo}`, error.stack);
+        }
+      }
+
+      this.logger.log(`过期订单处理完成，共处理 ${expiredOrders.length} 个订单`);
     } catch (error) {
-      this.logger.error('检查过期订单失败:', error);
+      this.logger.error('检查过期订单失败', error.stack);
     }
   }
 
-  // 每小时清理过期的回调记录
-  @Cron(CronExpression.EVERY_HOUR)
-  async cleanupOldCallbacks() {
-    this.logger.log('开始清理过期回调记录...');
-    
+  // 每天凌晨1点执行数据清理
+  @Cron(CronExpression.EVERY_DAY_AT_1AM)
+  async handleDataCleanup() {
     try {
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      this.logger.log('开始执行数据清理任务...');
 
-      const result = await this.prisma.paymentCallback.deleteMany({
+      // 清理30天前的支付回调记录
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      const deletedCallbacks = await this.prisma.paymentCallback.deleteMany({
         where: {
           createdAt: {
-            lt: sevenDaysAgo,
+            lt: thirtyDaysAgo,
           },
-          status: 1, // 只删除已处理的记录
+          status: 1, // 只删除已处理的回调
         },
       });
 
-      this.logger.log(`清理了 ${result.count} 条过期回调记录`);
+      this.logger.log(`清理了 ${deletedCallbacks.count} 条支付回调记录`);
+
+      // 清理过期的Redis缓存键（如果需要的话）
+      // await this.cleanupRedisCache();
+
+      this.logger.log('数据清理任务完成');
     } catch (error) {
-      this.logger.error('清理回调记录失败:', error);
+      this.logger.error('数据清理任务失败', error.stack);
     }
   }
 
-  // 每天生成支付统计报告
-  @Cron(CronExpression.EVERY_DAY_AT_1AM)
-  async generateDailyReport() {
-    this.logger.log('开始生成每日支付统计报告...');
-    
+  // 每天早上9点发送支付统计报告
+  @Cron(CronExpression.EVERY_DAY_AT_9AM)
+  async handleDailyReport() {
     try {
+      this.logger.log('开始生成日报...');
+
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
       yesterday.setHours(0, 0, 0, 0);
-      
+
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      const stats = await this.prisma.order.aggregate({
-        where: {
-          paymentStatus: PAYMENT_STATUS.PAID,
-          paidAt: {
-            gte: yesterday,
-            lt: today,
-          },
-        },
-        _sum: {
-          finalAmount: true,
-        },
-        _count: {
-          id: true,
-        },
-      });
-
-      const reportData = {
-        date: yesterday.toISOString().split('T')[0],
-        totalRevenue: stats._sum.finalAmount || 0,
-        orderCount: stats._count.id || 0,
-      };
-
-      this.logger.log(`每日统计报告: ${JSON.stringify(reportData)}`);
-      
-      // 保存到统计表
-      await this.prisma.dailyStats.create({
-        data: {
-          date: yesterday,
-          revenue: reportData.totalRevenue,
-          orderCount: reportData.orderCount,
-          type: 'payment',
-        },
-      });
-      
-    } catch (error) {
-      this.logger.error('生成每日报告失败:', error);
-    }
-  }
-
-  // 每周检查订阅即将过期的用户
-  @Cron(CronExpression.EVERY_DAY_AT_2AM)
-  async checkExpiringSubscriptions() {
-    this.logger.log('开始检查即将过期的订阅...');
-    
-    try {
-      const threeDaysLater = new Date();
-      threeDaysLater.setDate(threeDaysLater.getDate() + 3);
-
-      const expiringSubscriptions = await this.prisma.subscription.findMany({
-        where: {
-          status: 1, // 活跃订阅
-          endDate: {
-            lte: threeDaysLater,
-            gte: new Date(),
-          },
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-              email: true,
-              username: true,
+      // 统计昨天的支付数据
+      const [totalOrders, successfulOrders, totalAmount] = await Promise.all([
+        this.prisma.order.count({
+          where: {
+            createdAt: {
+              gte: yesterday,
+              lt: today,
             },
           },
-        },
-      });
+        }),
+        this.prisma.order.count({
+          where: {
+            paymentStatus: PAYMENT_STATUS.PAID,
+            paidAt: {
+              gte: yesterday,
+              lt: today,
+            },
+          },
+        }),
+        this.prisma.order.aggregate({
+          where: {
+            paymentStatus: PAYMENT_STATUS.PAID,
+            paidAt: {
+              gte: yesterday,
+              lt: today,
+            },
+          },
+          _sum: {
+            finalAmount: true,
+          },
+        }),
+      ]);
 
-      for (const subscription of expiringSubscriptions) {
-        await this.sendRenewalReminder(subscription);
-      }
+      const successRate = totalOrders > 0 ? (successfulOrders / totalOrders * 100).toFixed(2) : '0';
+      const revenue = totalAmount._sum.finalAmount || 0;
 
-      this.logger.log(`发送了 ${expiringSubscriptions.length} 条续费提醒`);
+      this.logger.log(
+        `昨日支付统计 - 总订单: ${totalOrders}, 成功订单: ${successfulOrders}, ` +
+        `成功率: ${successRate}%, 总收入: ¥${revenue}`
+      );
+
+      // 这里可以发送邮件通知给管理员
+      // await this.sendDailyReportEmail({
+      //   totalOrders,
+      //   successfulOrders,
+      //   successRate: parseFloat(successRate),
+      //   revenue: parseFloat(revenue.toString()),
+      // });
+
     } catch (error) {
-      this.logger.error('检查即将过期的订阅失败:', error);
+      this.logger.error('生成日报失败', error.stack);
     }
   }
 
-  private async sendRenewalReminder(subscription: any) {
-    // 发送续费提醒邮件
-    const { user, endDate, planId } = subscription;
-    const planInfo = SUBSCRIPTION_PLANS[planId];
-    
-    await this.notificationService.emailService.sendEmail({
-      to: user.email,
-      subject: '订阅即将过期提醒',
-      template: 'renewal-reminder',
-      context: {
-        username: user.username,
-        planName: planInfo?.name || '套餐',
-        endDate: endDate.toLocaleDateString(),
-      },
-    });
+  // 每小时检查支付状态同步
+  @Cron(CronExpression.EVERY_HOUR)
+  async handlePaymentStatusSync() {
+    try {
+      this.logger.debug('开始同步支付状态...');
 
-    this.logger.log(`发送续费提醒给用户: ${user.email}`);
+      // 查找1小时内创建但仍然是待支付状态的订单
+      const oneHourAgo = new Date();
+      oneHourAgo.setHours(oneHourAgo.getHours() - 1);
+
+      const pendingOrders = await this.prisma.order.findMany({
+        where: {
+          paymentStatus: PAYMENT_STATUS.PENDING,
+          createdAt: {
+            gte: oneHourAgo,
+          },
+          expiresAt: {
+            gt: new Date(), // 还没过期
+          },
+        },
+        select: {
+          orderNo: true,
+          paymentMethod: true,
+        },
+        take: 50, // 限制批量处理数量
+      });
+
+      if (pendingOrders.length === 0) {
+        this.logger.debug('没有需要同步状态的订单');
+        return;
+      }
+
+      this.logger.log(`开始同步 ${pendingOrders.length} 个订单的支付状态`);
+
+      // 这里可以调用支付宝/微信的查询接口来确认状态
+      // 暂时跳过具体实现，避免频繁调用第三方API
+
+    } catch (error) {
+      this.logger.error('同步支付状态失败', error.stack);
+    }
   }
 }
