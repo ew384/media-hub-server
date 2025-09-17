@@ -21,11 +21,13 @@ import { PaymentExceptionFilter } from './filters/payment-exception.filter';
 
 import { CommonModule } from '../common/common.module';
 import { EmailModule } from '../email/email.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
     CommonModule,
     EmailModule,
+    AuthModule, // 添加这个导入
     HttpModule.register({
       timeout: 10000,
       maxRedirects: 5,

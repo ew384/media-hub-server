@@ -17,10 +17,7 @@
     "strictBindCallApply": false,
     "forceConsistentCasingInFileNames": false,
     "noFallthroughCasesInSwitch": false,
-    "paths": {
-      "@/*": ["src/*"],
-      "@media-hub/database": ["../shared-database/src"]
-    }
+    "moduleResolution": "node"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "test"]
