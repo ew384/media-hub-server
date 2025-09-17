@@ -1,7 +1,33 @@
 // src/admin/admin.service.ts
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
-import { Subscription } from '@media-hub/database';
+import { User, Subscription } from '@media-hub/database';
+
+// 定义返回类型接口
+interface UserOverview {
+  user: {
+    id: number;
+    email: string | null;
+    username: string | null;
+    createdAt: Date;
+  } | null;
+  subscriptions: Subscription[];
+  totalSubscriptions: number;
+}
+
+interface DashboardStats {
+  totalUsers: number;
+  activeSubscriptions: number;
+  expiredSubscriptions: number;
+  monthlyRevenue: number;
+}
+
+interface UsersList {
+  users: any[];
+  total: number;
+  page: number;
+  limit: number;
+}
 
 @Injectable()
 export class AdminService {
@@ -12,7 +38,7 @@ export class AdminService {
   /**
    * 获取用户概览信息
    */
-  async getUserOverview(userId: number) {
+  async getUserOverview(userId: number): Promise<UserOverview> {
     const user = await this.db.user.findUnique({
       where: { id: userId },
       select: { 
@@ -47,7 +73,7 @@ export class AdminService {
   /**
    * 批量操作用户订阅
    */
-  async batchUpdateSubscriptions(userIds: number[], updates: Partial<Subscription>) {
+  async batchUpdateSubscriptions(userIds: number[], updates: Partial<Subscription>): Promise<number> {
     const result = await this.db.subscription.updateMany({
       where: {
         userId: { in: userIds },
@@ -63,7 +89,7 @@ export class AdminService {
   /**
    * 获取用户列表（管理员功能）
    */
-  async getUsersList(page: number = 1, limit: number = 20, search?: string) {
+  async getUsersList(page: number = 1, limit: number = 20, search?: string): Promise<UsersList> {
     const skip = (page - 1) * limit;
     
     const where = search ? {
@@ -110,7 +136,7 @@ export class AdminService {
   /**
    * 获取订阅统计数据（管理员仪表板）
    */
-  async getDashboardStats() {
+  async getDashboardStats(): Promise<DashboardStats> {
     const [
       totalUsers,
       activeSubscriptions,
