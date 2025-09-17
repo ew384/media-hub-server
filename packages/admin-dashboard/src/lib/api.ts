@@ -172,12 +172,17 @@ const apiClient = new MultiServiceApiClient();
 // ==================== 认证相关API ====================
 export const authApi = {
   // 管理员登录 - 复用普通用户登录
-  login: (credentials: { username: string; password: string }) =>
-    apiClient.auth.post('/auth/login', {
+  login: (credentials: { username: string; password: string }) => {
+    const email = credentials.username.includes('@') 
+      ? credentials.username 
+      : `${credentials.username}@example.com`;
+
+    return apiClient.auth.post('/auth/login', {
       type: 'email',
-      email: credentials.username, // 假设管理员用邮箱登录
+      email: email,
       password: credentials.password,
-    }),
+    });
+  },
 
   logout: () => apiClient.auth.post('/auth/logout'),
   getProfile: () => apiClient.auth.get('/auth/profile'),
