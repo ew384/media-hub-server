@@ -33,6 +33,7 @@ import {
   ClockCircleOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
+  ShoppingCartOutlined, // ✅ 添加缺失的导入
 } from '@ant-design/icons';
 import { orderApi } from '@/lib/api';
 import { usePermissions } from '@/stores/auth';
@@ -730,6 +731,37 @@ function OrderDetailContent({ order }: { order: OrderInfo }) {
       created_at: order.paid_at,
     }] : []),
   ];
+
+  // 获取订单状态配置 (需要在这里重新定义，因为是组件内部函数)
+  const getOrderStatusConfig = (status: string) => {
+    const configs: Record<string, { color: string; text: string; icon: React.ReactNode }> = {
+      pending: { color: 'orange', text: '待支付', icon: <ClockCircleOutlined /> },
+      paid: { color: 'green', text: '已支付', icon: <CheckCircleOutlined /> },
+      cancelled: { color: 'red', text: '已取消', icon: <CloseCircleOutlined /> },
+      refunded: { color: 'purple', text: '已退款', icon: <DollarOutlined /> },
+      expired: { color: 'gray', text: '已过期', icon: <ClockCircleOutlined /> },
+    };
+    return configs[status] || { color: 'default', text: status, icon: null };
+  };
+
+  // 获取套餐类型显示 (重新定义)
+  const getPlanTypeText = (planType: string) => {
+    const types: Record<string, string> = {
+      monthly: '月度套餐',
+      quarterly: '季度套餐',
+      yearly: '年度套餐',
+    };
+    return types[planType] || planType;
+  };
+
+  // 获取支付方式显示 (重新定义)
+  const getPaymentMethodText = (method: string) => {
+    const methods: Record<string, string> = {
+      alipay: '支付宝',
+      wechat: '微信支付',
+    };
+    return methods[method] || method;
+  };
 
   // 获取订单状态步骤
   const getOrderSteps = () => {

@@ -207,24 +207,26 @@ export default function DashboardPage() {
   // 使用模拟数据或真实数据
   const currentStats = stats || mockStats;
 
-  // 套餐分布图表数据 - 修复配置
+  // 套餐分布图表数据
   const planDistributionData = [
     { type: '月度套餐', value: currentStats.subscriptions.planDistribution.monthly },
     { type: '季度套餐', value: currentStats.subscriptions.planDistribution.quarterly },
     { type: '年度套餐', value: currentStats.subscriptions.planDistribution.yearly },
   ];
 
-  // 修复后的饼图配置
+  // 修复后的饼图配置 - 移除有问题的 spider 配置
   const planDistributionConfig = {
     data: planDistributionData,
     angleField: 'value',
     colorField: 'type',
     radius: 0.8,
-    innerRadius: 0.4, // 使用环形图
+    innerRadius: 0.4, // 环形图
     label: {
-      type: 'spider', // 修复：使用 spider 而不是 outer
-      labelHeight: 28,
-      content: '{name}\n{percentage}%',
+      content: '{name}: {percentage}%',
+      style: {
+        fontSize: 12,
+        textAlign: 'center',
+      },
     },
     interactions: [
       {
@@ -236,27 +238,35 @@ export default function DashboardPage() {
     ],
     color: ['#1890ff', '#52c41a', '#faad14'],
     legend: {
-      position: 'bottom',
+      position: 'bottom' as const,
+    },
+    // 添加 tooltip 配置
+    tooltip: {
+      formatter: (datum: any) => {
+        return { name: datum.type, value: `${datum.value} (${((datum.value / planDistributionData.reduce((sum, item) => sum + item.value, 0)) * 100).toFixed(1)}%)` };
+      },
     },
   };
 
-  // 支付方式分布图表数据 - 修复配置
+  // 支付方式分布图表数据
   const paymentMethodData = [
     { type: '支付宝', value: currentStats.payments.methodDistribution.alipay },
     { type: '微信支付', value: currentStats.payments.methodDistribution.wechat },
   ];
 
-  // 修复后的饼图配置
+  // 修复后的饼图配置 - 移除有问题的 spider 配置
   const paymentMethodConfig = {
     data: paymentMethodData,
     angleField: 'value',
     colorField: 'type',
     radius: 0.8,
-    innerRadius: 0.4, // 使用环形图
+    innerRadius: 0.4, // 环形图
     label: {
-      type: 'spider', // 修复：使用 spider 而不是 outer
-      labelHeight: 28,
-      content: '{name}\n{percentage}%',
+      content: '{name}: {percentage}%',
+      style: {
+        fontSize: 12,
+        textAlign: 'center',
+      },
     },
     interactions: [
       {
@@ -268,7 +278,13 @@ export default function DashboardPage() {
     ],
     color: ['#1890ff', '#52c41a'],
     legend: {
-      position: 'bottom',
+      position: 'bottom' as const,
+    },
+    // 添加 tooltip 配置
+    tooltip: {
+      formatter: (datum: any) => {
+        return { name: datum.type, value: `${datum.value}% 占比` };
+      },
     },
   };
 

@@ -20,6 +20,7 @@ import {
   Progress,
   Alert,
   Tooltip,
+  Typography,
 } from 'antd';
 import {
   SearchOutlined,
@@ -31,9 +32,10 @@ import {
   CrownOutlined,
   UserOutlined,
   CalendarOutlined,
+  CloseCircleOutlined,
 } from '@ant-design/icons';
 import { SubscriptionInfo, PlanConfig } from '@/types';
-import { usePermissions } from '@/hooks/useAuth';
+import { usePermissions } from '@/stores/auth';
 import { SUBSCRIPTION_STATUS, PLAN_TYPES } from '@/lib/constants';
 import { formatDateTime, formatRelativeTime, formatMoney } from '@/lib/utils';
 import dayjs from 'dayjs';
