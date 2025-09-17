@@ -1,14 +1,20 @@
 // src/subscription/dto/update-subscription.dto.ts
-import { IsBoolean, IsOptional, IsIn, IsNumber } from 'class-validator';
-import { SubscriptionStatus } from '../constants/subscription.constants';
+import { IsOptional, IsNumber, IsDateString, IsBoolean } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateSubscriptionDto {
+  @ApiProperty({ description: '订阅状态', required: false })
+  @IsOptional()
+  @IsNumber()
+  status?: number;
+
+  @ApiProperty({ description: '结束日期', required: false })
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
+
+  @ApiProperty({ description: '自动续费', required: false })
   @IsOptional()
   @IsBoolean()
   autoRenew?: boolean;
-
-  @IsOptional()
-  @IsNumber()
-  @IsIn(Object.values(SubscriptionStatus))
-  status?: number;
 }

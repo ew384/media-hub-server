@@ -19,7 +19,15 @@ import { PermissionsService } from '../permissions/permissions.service';
 import { UpdateSubscriptionDto } from '../subscription/dto/update-subscription.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { AdminGuard } from './guards/admin.guard'; // 需要创建管理员权限守卫
+import { AdminGuard } from './guards/admin.guard';
+import { Subscription } from '@media-hub/database';
+
+// 定义返回类型接口
+interface ApiResponse<T> {
+  code: number;
+  message: string;
+  data?: T;
+}
 
 @ApiTags('admin')
 @Controller('admin')
@@ -39,7 +47,7 @@ export class AdminController {
   async updateUserSubscription(
     @Param('userId', ParseIntPipe) userId: number,
     @Body() updateDto: UpdateSubscriptionDto,
-  ) {
+  ): Promise<ApiResponse<Subscription>> {
     const data = await this.subscriptionService.updateSubscriptionByAdmin(userId, updateDto);
     
     // 清除用户权限缓存
@@ -55,7 +63,7 @@ export class AdminController {
   @Get('subscriptions/expiring')
   @ApiOperation({ summary: '获取即将过期的订阅' })
   @ApiResponse({ status: 200, description: '获取成功' })
-  async getExpiringSubscriptions(@Query('days', ParseIntPipe) days: number = 7) {
+  async getExpiringSubscriptions(@Query('days', ParseIntPipe) days: number = 7): Promise<ApiResponse<any>> {
     const data = await this.subscriptionService.getExpiringSubscriptions(days);
     return {
       code: 200,
@@ -69,7 +77,7 @@ export class AdminController {
   @ApiResponse({ status: 200, description: '延长成功' })
   async extendSubscription(
     @Body() body: { userId: number; days: number },
-  ) {
+  ): Promise<ApiResponse<Subscription>> {
     const data = await this.subscriptionService.extendSubscription(body.userId, body.days);
     
     // 清除用户权限缓存
@@ -85,7 +93,7 @@ export class AdminController {
   @Get('subscriptions/stats')
   @ApiOperation({ summary: '获取订阅统计数据' })
   @ApiResponse({ status: 200, description: '获取成功' })
-  async getSubscriptionStats() {
+  async getSubscriptionStats(): Promise<ApiResponse<any>> {
     const data = await this.subscriptionService.getSubscriptionStats();
     return {
       code: 200,
@@ -97,7 +105,7 @@ export class AdminController {
   @Post('permissions/refresh-all')
   @ApiOperation({ summary: '刷新所有用户权限缓存' })
   @ApiResponse({ status: 200, description: '刷新成功' })
-  async refreshAllPermissions() {
+  async refreshAllPermissions(): Promise<ApiResponse<never>> {
     const refreshedCount = await this.permissionsService.refreshAllPermissionsCache();
     return {
       code: 200,
@@ -108,7 +116,7 @@ export class AdminController {
   @Post('subscriptions/process-expired')
   @ApiOperation({ summary: '手动处理过期订阅' })
   @ApiResponse({ status: 200, description: '处理成功' })
-  async processExpiredSubscriptions() {
+  async processExpiredSubscriptions(): Promise<ApiResponse<never>> {
     const processedCount = await this.subscriptionService.handleExpiredSubscriptions();
     return {
       code: 200,
@@ -119,7 +127,7 @@ export class AdminController {
   @Get('users/:userId/subscription')
   @ApiOperation({ summary: '获取指定用户的订阅信息' })
   @ApiResponse({ status: 200, description: '获取成功' })
-  async getUserSubscription(@Param('userId', ParseIntPipe) userId: number) {
+  async getUserSubscription(@Param('userId', ParseIntPipe) userId: number): Promise<ApiResponse<any>> {
     const data = await this.subscriptionService.getSubscriptionStatus(userId);
     return {
       code: 200,
@@ -131,7 +139,7 @@ export class AdminController {
   @Get('users/:userId/permissions')
   @ApiOperation({ summary: '获取指定用户的权限信息' })
   @ApiResponse({ status: 200, description: '获取成功' })
-  async getUserPermissions(@Param('userId', ParseIntPipe) userId: number) {
+  async getUserPermissions(@Param('userId', ParseIntPipe) userId: number): Promise<ApiResponse<any>> {
     const data = await this.permissionsService.getUserPermissions(userId);
     return {
       code: 200,
@@ -143,7 +151,7 @@ export class AdminController {
   @Post('users/:userId/permissions/clear-cache')
   @ApiOperation({ summary: '清除指定用户的权限缓存' })
   @ApiResponse({ status: 200, description: '清除成功' })
-  async clearUserPermissionsCache(@Param('userId', ParseIntPipe) userId: number) {
+  async clearUserPermissionsCache(@Param('userId', ParseIntPipe) userId: number): Promise<ApiResponse<never>> {
     await this.permissionsService.clearUserPermissionsCache(userId);
     return {
       code: 200,

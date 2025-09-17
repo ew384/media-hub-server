@@ -20,6 +20,14 @@ import { Public } from '../auth/decorators/public.decorator';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { PreviewSubscriptionDto } from './dto/preview-subscription.dto';
 import { SubscriptionQueryDto } from './dto/subscription-query.dto';
+import { Subscription } from '@media-hub/database';
+
+// 定义返回类型接口
+interface ApiResponse<T> {
+  code: number;
+  message: string;
+  data?: T;
+}
 
 @ApiTags('subscription')
 @ApiBearerAuth()
@@ -32,7 +40,7 @@ export class SubscriptionController {
   @Get('plans')
   @ApiOperation({ summary: '获取所有会员套餐' })
   @ApiResponse({ status: 200, description: '获取成功' })
-  async getPlans() {
+  async getPlans(): Promise<ApiResponse<any>> {
     const data = await this.subscriptionService.getPlans();
     return {
       code: 200,
@@ -44,7 +52,7 @@ export class SubscriptionController {
   @Get('status')
   @ApiOperation({ summary: '获取当前用户会员状态' })
   @ApiResponse({ status: 200, description: '获取成功' })
-  async getSubscriptionStatus(@CurrentUser() user) {
+  async getSubscriptionStatus(@CurrentUser() user: any): Promise<ApiResponse<any>> {
     const data = await this.subscriptionService.getSubscriptionStatus(user.id);
     return {
       code: 200,
@@ -57,9 +65,9 @@ export class SubscriptionController {
   @ApiOperation({ summary: '获取订阅历史' })
   @ApiResponse({ status: 200, description: '获取成功' })
   async getSubscriptionHistory(
-    @CurrentUser() user,
+    @CurrentUser() user: any,
     @Query() query: SubscriptionQueryDto,
-  ) {
+  ): Promise<ApiResponse<any>> {
     const data = await this.subscriptionService.getSubscriptionHistory(user.id, query);
     return {
       code: 200,
@@ -73,9 +81,9 @@ export class SubscriptionController {
   @ApiResponse({ status: 200, description: '预览成功' })
   @HttpCode(HttpStatus.OK)
   async previewSubscription(
-    @CurrentUser() user,
+    @CurrentUser() user: any,
     @Body() previewDto: PreviewSubscriptionDto,
-  ) {
+  ): Promise<ApiResponse<any>> {
     const data = await this.subscriptionService.previewSubscription(user.id, previewDto);
     return {
       code: 200,
@@ -88,9 +96,9 @@ export class SubscriptionController {
   @ApiOperation({ summary: '创建订阅' })
   @ApiResponse({ status: 201, description: '订阅创建成功' })
   async createSubscription(
-    @CurrentUser() user,
+    @CurrentUser() user: any,
     @Body() createDto: CreateSubscriptionDto,
-  ) {
+  ): Promise<ApiResponse<Subscription>> {
     const data = await this.subscriptionService.createSubscription(user.id, createDto);
     return {
       code: 201,
@@ -103,7 +111,7 @@ export class SubscriptionController {
   @ApiOperation({ summary: '取消自动续费' })
   @ApiResponse({ status: 200, description: '取消成功' })
   @HttpCode(HttpStatus.OK)
-  async cancelAutoRenew(@CurrentUser() user) {
+  async cancelAutoRenew(@CurrentUser() user: any): Promise<ApiResponse<never>> {
     await this.subscriptionService.cancelAutoRenew(user.id);
     return {
       code: 200,
@@ -115,7 +123,7 @@ export class SubscriptionController {
   @ApiOperation({ summary: '恢复自动续费' })
   @ApiResponse({ status: 200, description: '恢复成功' })
   @HttpCode(HttpStatus.OK)
-  async resumeAutoRenew(@CurrentUser() user) {
+  async resumeAutoRenew(@CurrentUser() user: any): Promise<ApiResponse<never>> {
     await this.subscriptionService.resumeAutoRenew(user.id);
     return {
       code: 200,
