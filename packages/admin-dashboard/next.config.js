@@ -1,7 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // 移除已弃用的 experimental.appDir 配置
+  // Next.js 14 中 App Router 是默认启用的
   experimental: {
-    appDir: true,
+    // 如果需要其他实验性功能，在这里添加
   },
   typescript: {
     // 在生产构建期间忽略类型错误

@@ -1,3 +1,4 @@
+// packages/payment-api/src/main.ts
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
@@ -13,12 +14,14 @@ async function bootstrap() {
     transform: true,
   }));
 
-  // CORS 配置
+  // CORS 配置 - 修复：添加 admin-dashboard 端口
   app.enableCors({
     origin: [
-      'http://localhost:3000',  // admin-dashboard
-      'http://localhost:8080',  // 前端应用
-      'http://localhost:3001',  // auth-api (如果需要跨服务调用)
+      'http://localhost:3103',  // admin-dashboard - 新增
+      'http://localhost:3000',  // 前端应用
+      'http://localhost:8080',  // 其他前端应用
+      'http://localhost:3100',  // auth-api (跨服务调用)
+      'http://localhost:3101',  // subscription-api (跨服务调用)
       process.env.FRONTEND_URL,
     ].filter(Boolean),
     credentials: true,
@@ -40,14 +43,14 @@ async function bootstrap() {
     .addTag('payment', '支付管理')
     .addTag('orders', '订单管理')
     .addTag('refunds', '退款管理')
-    .addServer('http://localhost:3001', '开发环境')
+    .addServer('http://localhost:3102', '开发环境') // 修复端口
     .addServer(process.env.API_BASE_URL || 'https://api.yourdomain.com', '生产环境')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api-docs', app, document, {
     swaggerOptions: {
-      persistAuthorization: true, // 保持授权状态
+      persistAuthorization: true,
     },
   });
 
@@ -62,13 +65,12 @@ async function bootstrap() {
   });
 
   // 启动服务
-  const port = process.env.PAYMENT_PORT || process.env.PORT || 3001;
+  const port = process.env.PORT || 3102; // 使用配置的端口
   await app.listen(port, '0.0.0.0');
 
   console.log(`🚀 Payment API is running on: http://localhost:${port}`);
   console.log(`📚 API Documentation: http://localhost:${port}/api-docs`);
   console.log(`🏥 Health Check: http://localhost:${port}/health`);
-  console.log(`🔗 Auth Service: ${process.env.AUTH_SERVICE_URL || 'http://localhost:3000'}`);
 }
 
 bootstrap().catch((error) => {

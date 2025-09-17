@@ -1,36 +1,42 @@
+// packages/admin-dashboard/src/lib/api.ts
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import { message } from 'antd';
 import { ApiResponse, PaginatedResponse } from '@/types';
 
-// API基础配置
-const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000';
+// 多服务API配置
+const API_URLS = {
+  auth: process.env.NEXT_PUBLIC_AUTH_API_URL || 'http://localhost:3100/api/v1',
+  subscription: process.env.NEXT_PUBLIC_SUBSCRIPTION_API_URL || 'http://localhost:3101',
+  payment: process.env.NEXT_PUBLIC_PAYMENT_API_URL || 'http://localhost:3102',
+};
 
-class ApiClient {
-  private client: AxiosInstance;
+class MultiServiceApiClient {
+  private clients: { [key: string]: AxiosInstance } = {};
 
   constructor() {
-    this.client = axios.create({
-      baseURL: BASE_URL,
-      timeout: 30000,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+    // 为每个服务创建独立的客户端
+    Object.entries(API_URLS).forEach(([service, baseURL]) => {
+      this.clients[service] = axios.create({
+        baseURL,
+        timeout: 30000,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
 
-    this.setupInterceptors();
+      this.setupInterceptors(this.clients[service]);
+    });
   }
 
-  private setupInterceptors() {
+  private setupInterceptors(client: AxiosInstance) {
     // 请求拦截器
-    this.client.interceptors.request.use(
+    client.interceptors.request.use(
       (config) => {
-        // 添加认证token
         const token = this.getToken();
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
 
-        // 添加时间戳防止缓存
         if (config.method === 'get') {
           config.params = {
             ...config.params,
@@ -40,26 +46,23 @@ class ApiClient {
 
         return config;
       },
-      (error) => {
-        return Promise.reject(error);
-      }
+      (error) => Promise.reject(error)
     );
 
     // 响应拦截器
-    this.client.interceptors.response.use(
-      (response: AxiosResponse<ApiResponse>) => {
-        const { data } = response;
-        
-        // 处理业务错误码
-        if (data.code !== 200) {
-          message.error(data.message || '请求失败');
-          return Promise.reject(new Error(data.message));
+    client.interceptors.response.use(
+      (response: AxiosResponse) => {
+        // 处理不同服务的响应格式
+        if (response.data?.code !== undefined) {
+          // 统一响应格式的服务
+          if (response.data.code !== 200) {
+            message.error(response.data.message || '请求失败');
+            return Promise.reject(new Error(response.data.message));
+          }
         }
-
         return response;
       },
       (error) => {
-        // 处理HTTP错误
         if (error.response) {
           const { status, data } = error.response;
           
@@ -81,10 +84,8 @@ class ApiClient {
             default:
               message.error(data?.message || '网络错误，请稍后重试');
           }
-        } else if (error.request) {
-          message.error('网络连接失败，请检查网络');
         } else {
-          message.error('请求失败');
+          message.error('网络连接失败，请检查网络');
         }
 
         return Promise.reject(error);
@@ -92,7 +93,6 @@ class ApiClient {
     );
   }
 
-  // Token管理
   private getToken(): string | null {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('admin_token');
@@ -107,246 +107,200 @@ class ApiClient {
     }
   }
 
-  // 基础请求方法
-  async get<T = any>(url: string, config?: AxiosRequestConfig): Promise<T> {
-    const response = await this.client.get<ApiResponse<T>>(url, config);
-    return response.data.data;
-  }
+  // 通用请求方法
+  private async request<T = any>(
+    service: keyof typeof API_URLS,
+    method: 'get' | 'post' | 'put' | 'delete',
+    url: string,
+    data?: any,
+    config?: AxiosRequestConfig
+  ): Promise<T> {
+    const client = this.clients[service];
+    if (!client) {
+      throw new Error(`未知的服务: ${service}`);
+    }
 
-  async post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
-    const response = await this.client.post<ApiResponse<T>>(url, data, config);
-    return response.data.data;
-  }
-
-  async put<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
-    const response = await this.client.put<ApiResponse<T>>(url, data, config);
-    return response.data.data;
-  }
-
-  async delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<T> {
-    const response = await this.client.delete<ApiResponse<T>>(url, config);
-    return response.data.data;
-  }
-
-  // 文件上传
-  async upload(url: string, file: File, onProgress?: (progress: number) => void): Promise<any> {
-    const formData = new FormData();
-    formData.append('file', file);
-
-    const response = await this.client.post<ApiResponse>(url, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-      onUploadProgress: (progressEvent) => {
-        if (progressEvent.total && onProgress) {
-          const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-          onProgress(progress);
-        }
-      },
+    const response = await client.request({
+      method,
+      url,
+      data,
+      ...config,
     });
 
-    return response.data.data;
+    // 根据不同服务返回相应的数据格式
+    return response.data?.data !== undefined ? response.data.data : response.data;
   }
 
-  // 下载文件
-  async download(url: string, filename?: string): Promise<void> {
-    const response = await this.client.get(url, {
-      responseType: 'blob',
-    });
+  // 各服务的请求方法
+  auth = {
+    get: <T = any>(url: string, config?: AxiosRequestConfig): Promise<T> =>
+      this.request('auth', 'get', url, undefined, config),
+    post: <T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> =>
+      this.request('auth', 'post', url, data, config),
+    put: <T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> =>
+      this.request('auth', 'put', url, data, config),
+    delete: <T = any>(url: string, config?: AxiosRequestConfig): Promise<T> =>
+      this.request('auth', 'delete', url, undefined, config),
+  };
 
-    const blob = new Blob([response.data]);
-    const downloadUrl = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.download = filename || 'download';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(downloadUrl);
-  }
+  subscription = {
+    get: <T = any>(url: string, config?: AxiosRequestConfig): Promise<T> =>
+      this.request('subscription', 'get', url, undefined, config),
+    post: <T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> =>
+      this.request('subscription', 'post', url, data, config),
+    put: <T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> =>
+      this.request('subscription', 'put', url, data, config),
+    delete: <T = any>(url: string, config?: AxiosRequestConfig): Promise<T> =>
+      this.request('subscription', 'delete', url, undefined, config),
+  };
+
+  payment = {
+    get: <T = any>(url: string, config?: AxiosRequestConfig): Promise<T> =>
+      this.request('payment', 'get', url, undefined, config),
+    post: <T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> =>
+      this.request('payment', 'post', url, data, config),
+    put: <T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> =>
+      this.request('payment', 'put', url, data, config),
+    delete: <T = any>(url: string, config?: AxiosRequestConfig): Promise<T> =>
+      this.request('payment', 'delete', url, undefined, config),
+  };
 }
 
 // 创建API客户端实例
-const apiClient = new ApiClient();
+const apiClient = new MultiServiceApiClient();
 
 // ==================== 认证相关API ====================
 export const authApi = {
-  // 管理员登录
+  // 管理员登录 - 复用普通用户登录
   login: (credentials: { username: string; password: string }) =>
-    apiClient.post('/admin/auth/login', credentials),
+    apiClient.auth.post('/auth/login', {
+      type: 'email',
+      email: credentials.username, // 假设管理员用邮箱登录
+      password: credentials.password,
+    }),
 
-  // 管理员登出
-  logout: () => apiClient.post('/admin/auth/logout'),
-
-  // 获取管理员信息
-  getProfile: () => apiClient.get('/admin/auth/profile'),
-
-  // 更新管理员信息
-  updateProfile: (data: any) => apiClient.put('/admin/auth/profile', data),
-
-  // 修改密码
+  logout: () => apiClient.auth.post('/auth/logout'),
+  getProfile: () => apiClient.auth.get('/auth/profile'),
+  updateProfile: (data: any) => apiClient.auth.put('/auth/profile', data),
   changePassword: (data: { oldPassword: string; newPassword: string }) =>
-    apiClient.put('/admin/auth/password', data),
+    apiClient.auth.put('/auth/password', data), // 这个接口需要后端实现
 };
 
 // ==================== 数据统计API ====================
 export const dashboardApi = {
-  // 获取概览统计
-  getStats: () => apiClient.get('/admin/dashboard/stats'),
-
-  // 获取趋势数据
+  getStats: () => apiClient.subscription.get('/admin/subscriptions/stats'),
   getTrends: (params?: { dateRange?: [string, string] }) =>
-    apiClient.get('/admin/dashboard/trends', { params }),
-
-  // 获取实时数据
-  getRealtime: () => apiClient.get('/admin/dashboard/realtime'),
+    apiClient.subscription.get('/admin/dashboard/trends', { params }),
+  getRealtime: () => apiClient.subscription.get('/admin/dashboard/realtime'),
 };
 
 // ==================== 用户管理API ====================
 export const userApi = {
-  // 获取用户列表
   getUsers: (params: any): Promise<PaginatedResponse> =>
-    apiClient.get('/admin/users', { params }),
-
-  // 获取用户详情
-  getUserDetail: (id: number) => apiClient.get(`/admin/users/${id}`),
-
-  // 更新用户状态
+    apiClient.subscription.get('/admin/users', { params }), // 需要后端实现
+  getUserDetail: (id: number) => apiClient.auth.get(`/users/${id}`), // 需要后端实现
   updateUserStatus: (id: number, status: number) =>
-    apiClient.put(`/admin/users/${id}/status`, { status }),
-
-  // 重置用户密码
+    apiClient.subscription.put(`/admin/users/${id}/status`, { status }), // 需要后端实现
   resetPassword: (id: number) =>
-    apiClient.post(`/admin/users/${id}/reset-password`),
-
-  // 修改用户订阅
+    apiClient.auth.post(`/users/${id}/reset-password`),
   updateSubscription: (id: number, data: any) =>
-    apiClient.put(`/admin/users/${id}/subscription`, data),
-
-  // 添加用户备注
+    apiClient.subscription.put(`/admin/subscription/${id}`, data),
   addNote: (id: number, note: string) =>
-    apiClient.post(`/admin/users/${id}/notes`, { note }),
-
-  // 获取用户登录历史
+    apiClient.subscription.post(`/admin/users/${id}/notes`, { note }),
   getLoginHistory: (id: number, params?: any) =>
-    apiClient.get(`/admin/users/${id}/login-history`, { params }),
-
-  // 批量操作用户
+    apiClient.auth.get(`/users/${id}/login-history`, { params }),
   batchAction: (action: string, ids: number[], data?: any) =>
-    apiClient.post('/admin/users/batch', { action, ids, data }),
+    apiClient.subscription.post('/admin/users/batch', { action, ids, data }),
 };
 
 // ==================== 订单管理API ====================
 export const orderApi = {
-  // 获取订单列表
   getOrders: (params: any): Promise<PaginatedResponse> =>
-    apiClient.get('/admin/orders', { params }),
-
-  // 获取订单详情
-  getOrderDetail: (orderNo: string) => apiClient.get(`/admin/orders/${orderNo}`),
-
-  // 申请退款
+    apiClient.payment.get('/admin/payment/orders', { params }),
+  getOrderDetail: (orderNo: string) =>
+    apiClient.payment.get(`/admin/payment/orders/${orderNo}`),
   refundOrder: (orderNo: string, data: { amount: number; reason: string }) =>
-    apiClient.post(`/admin/orders/${orderNo}/refund`, data),
-
-  // 取消订单
+    apiClient.payment.post('/admin/payment/refunds', { orderNo, ...data }),
   cancelOrder: (orderNo: string) =>
-    apiClient.put(`/admin/orders/${orderNo}/cancel`),
-
-  // 手动确认订单
+    apiClient.payment.put(`/admin/payment/orders/${orderNo}/cancel`),
   confirmOrder: (orderNo: string) =>
-    apiClient.put(`/admin/orders/${orderNo}/confirm`),
-
-  // 添加订单备注
+    apiClient.payment.put(`/admin/payment/orders/${orderNo}/confirm`),
   addNote: (orderNo: string, note: string) =>
-    apiClient.post(`/admin/orders/${orderNo}/notes`, { note }),
-
-  // 获取订单时间线
+    apiClient.payment.post(`/admin/payment/orders/${orderNo}/notes`, { note }),
   getTimeline: (orderNo: string) =>
-    apiClient.get(`/admin/orders/${orderNo}/timeline`),
+    apiClient.payment.get(`/admin/payment/orders/${orderNo}/timeline`),
 };
 
 // ==================== 订阅管理API ====================
 export const subscriptionApi = {
-  // 获取订阅列表
   getSubscriptions: (params: any): Promise<PaginatedResponse> =>
-    apiClient.get('/admin/subscriptions', { params }),
-
-  // 获取订阅详情
+    apiClient.subscription.get('/admin/subscriptions', { params }), // 需要后端实现
   getSubscriptionDetail: (id: number) =>
-    apiClient.get(`/admin/subscriptions/${id}`),
-
-  // 延长订阅
+    apiClient.subscription.get(`/admin/subscriptions/${id}`), // 需要后端实现
   extendSubscription: (id: number, days: number) =>
-    apiClient.put(`/admin/subscriptions/${id}/extend`, { days }),
-
-  // 取消订阅
+    apiClient.subscription.post('/admin/subscription/extend', { userId: id, days }),
   cancelSubscription: (id: number) =>
-    apiClient.put(`/admin/subscriptions/${id}/cancel`),
-
-  // 批量操作订阅
+    apiClient.subscription.put(`/admin/subscriptions/${id}/cancel`),
   batchAction: (action: string, ids: number[], data?: any) =>
-    apiClient.post('/admin/subscriptions/batch', { action, ids, data }),
-
-  // 获取即将到期订阅
+    apiClient.subscription.post('/admin/subscriptions/batch', { action, ids, data }),
   getExpiring: (days: number = 7) =>
-    apiClient.get('/admin/subscriptions/expiring', { params: { days } }),
+    apiClient.subscription.get('/admin/subscriptions/expiring', { params: { days } }),
 };
 
 // ==================== 数据分析API ====================
 export const analyticsApi = {
   // 用户分析数据
   getUserAnalytics: (params: { dateRange?: [string, string] }) =>
-    apiClient.get('/admin/analytics/users', { params }),
+    apiClient.subscription.get('/admin/analytics/users', { params }),
 
   // 收入分析数据
   getRevenueAnalytics: (params: { dateRange?: [string, string] }) =>
-    apiClient.get('/admin/analytics/revenue', { params }),
+    apiClient.payment.get('/admin/payment/statistics', { params }),
 
   // 订阅分析数据
   getSubscriptionAnalytics: (params: { dateRange?: [string, string] }) =>
-    apiClient.get('/admin/analytics/subscriptions', { params }),
+    apiClient.subscription.get('/admin/subscriptions/stats', { params }),
 
   // 导出报表
   exportReport: (type: string, params: any) =>
-    apiClient.download('/admin/analytics/export', `${type}_report.xlsx`),
+    apiClient.subscription.get('/admin/export', { params }),
 };
 
 // ==================== 系统设置API ====================
 export const settingsApi = {
   // 获取系统设置
-  getSettings: () => apiClient.get('/admin/settings'),
+  getSettings: () => apiClient.subscription.get('/admin/settings'),
 
   // 更新系统设置
-  updateSettings: (data: any) => apiClient.put('/admin/settings', data),
+  updateSettings: (data: any) => apiClient.subscription.put('/admin/settings', data),
 
   // 获取套餐配置
-  getPlans: () => apiClient.get('/admin/settings/plans'),
+  getPlans: () => apiClient.subscription.get('/admin/plans'),
 
   // 更新套餐配置
-  updatePlans: (data: any) => apiClient.put('/admin/settings/plans', data),
+  updatePlans: (data: any) => apiClient.subscription.put('/admin/plans', data),
 };
 
 // ==================== 系统日志API ====================
 export const logApi = {
   // 获取系统日志
   getLogs: (params: any): Promise<PaginatedResponse> =>
-    apiClient.get('/admin/logs', { params }),
+    apiClient.subscription.get('/admin/logs', { params }),
 
   // 清理日志
   clearLogs: (before: string) =>
-    apiClient.delete('/admin/logs', { params: { before } }),
+    apiClient.subscription.delete('/admin/logs', { params: { before } }),
 };
 
 // ==================== 通知API ====================
 export const notificationApi = {
   // 获取通知列表
   getNotifications: (params?: any) =>
-    apiClient.get('/admin/notifications', { params }),
+    apiClient.subscription.get('/admin/notifications', { params }),
 
   // 标记已读
   markAsRead: (ids: number[]) =>
-    apiClient.put('/admin/notifications/read', { ids }),
+    apiClient.subscription.put('/admin/notifications/read', { ids }),
 
   // 发送通知
   sendNotification: (data: {
@@ -354,7 +308,7 @@ export const notificationApi = {
     title: string;
     message: string;
     type: string;
-  }) => apiClient.post('/admin/notifications/send', data),
+  }) => apiClient.subscription.post('/admin/notifications/send', data),
 };
 
 export default apiClient;

@@ -1,4 +1,4 @@
-// src/main.ts
+// packages/subscription-api/src/main.ts
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
@@ -17,10 +17,18 @@ async function bootstrap() {
     forbidNonWhitelisted: true,
   }));
 
-  // CORS配置
+  // CORS配置 - 修复：添加多个来源
   app.enableCors({
-    origin: configService.get('CORS_ORIGIN', 'http://localhost:3000'),
+    origin: [
+      'http://localhost:3103',  // admin-dashboard - 新增
+      'http://localhost:3000',  // 前端应用
+      'http://localhost:3100',  // auth-api
+      'http://localhost:3102',  // payment-api
+      configService.get('CORS_ORIGIN', 'http://localhost:3000'),
+    ].filter(Boolean),
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
   // API文档配置
@@ -38,7 +46,7 @@ async function bootstrap() {
   SwaggerModule.setup('api/docs', app, document);
 
   // 启动服务
-  const port = configService.get('PORT', 3000);
+  const port = configService.get('PORT', 3101); // 使用配置的端口
   await app.listen(port);
   
   logger.log(`🚀 应用启动成功！`);
