@@ -1,7 +1,7 @@
 #!/bin/bash
 # subscription-api-complete-test.sh - 完整测试脚本
 
-BASE_URL="http://localhost:3001"
+BASE_URL="http://localhost:3101"
 AUTH_BASE_URL="http://localhost:3171"
 CONTENT_TYPE="Content-Type: application/json"
 
