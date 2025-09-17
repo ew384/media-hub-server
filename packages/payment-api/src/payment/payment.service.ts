@@ -1,24 +1,31 @@
-// src/payment/services/payment.service.ts
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
-import { RedisService } from '../redis/redis.service';
-import { AlipayService } from './alipay.service';
-import { WechatPayService } from './wechat-pay.service';
-import { QueueService } from './queue.service';
-import { CreateOrderDto, CreateRefundDto } from '../dto';
-import { PAYMENT_STATUS, PAYMENT_METHOD, SUBSCRIPTION_PLANS, ORDER_EXPIRE_MINUTES } from '../constants';
-import { generateOrderNo, generateRefundNo } from '../utils';
+// packages/payment-api/src/payment/payment.service.ts
+import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
+import { HttpService } from '@nestjs/axios';
+import { ConfigService } from '@nestjs/config';
+import { PrismaService } from '../common/database/prisma.service';
+import { RedisService } from '../common/redis/redis.service';
+import { AlipayService } from './services/alipay.service';
+import { WechatPayService } from './services/wechat-pay.service';
+import { QueueService } from './services/queue.service';
+import { CreateOrderDto, QueryOrdersDto, CreateRefundDto } from './dto';
+import { PAYMENT_STATUS, PAYMENT_METHOD, SUBSCRIPTION_PLANS, ORDER_EXPIRE_MINUTES } from './constants/payment.constants';
+import { generateOrderNo, generateRefundNo, calculateExpireTime, formatAmount } from './utils';
 import * as QRCode from 'qrcode';
 import * as moment from 'moment';
+import { firstValueFrom } from 'rxjs';
 
 @Injectable()
 export class PaymentService {
+  private readonly logger = new Logger(PaymentService.name);
+
   constructor(
-    private prisma: PrismaService,
-    private redis: RedisService,
-    private alipayService: AlipayService,
-    private wechatPayService: WechatPayService,
-    private queueService: QueueService,
+    private readonly prisma: PrismaService,
+    private readonly redis: RedisService,
+    private readonly alipayService: AlipayService,
+    private readonly wechatPayService: WechatPayService,
+    private readonly queueService: QueueService,
+    private readonly httpService: HttpService,
+    private readonly configService: ConfigService,
   ) {}
 
   async createOrder(userId: number, createOrderDto: CreateOrderDto) {
@@ -40,7 +47,7 @@ export class PaymentService {
 
     const finalAmount = originalAmount - discountAmount;
     const orderNo = generateOrderNo();
-    const expiresAt = moment().add(ORDER_EXPIRE_MINUTES, 'minutes').toDate();
+    const expiresAt = calculateExpireTime(ORDER_EXPIRE_MINUTES);
 
     // 创建预支付订单
     let qrCodeUrl: string;
@@ -65,6 +72,7 @@ export class PaymentService {
       qrCodeData = await QRCode.toDataURL(qrCodeUrl);
 
     } catch (error) {
+      this.logger.error(`创建支付订单失败: ${error.message}`, error.stack);
       throw new BadRequestException('创建支付订单失败');
     }
 
@@ -97,14 +105,16 @@ export class PaymentService {
     // 设置订单过期任务
     await this.queueService.addExpireOrderJob(orderNo, ORDER_EXPIRE_MINUTES * 60 * 1000);
 
+    this.logger.log(`订单创建成功: ${orderNo}, 用户ID: ${userId}, 金额: ${finalAmount}`);
+
     return {
       orderNo,
       planInfo: {
         planId,
         planName: planInfo.name,
-        originalAmount,
-        discountAmount,
-        finalAmount,
+        originalAmount: formatAmount(originalAmount),
+        discountAmount: formatAmount(discountAmount),
+        finalAmount: formatAmount(finalAmount),
       },
       qrCodeUrl,
       qrCodeData,
@@ -151,7 +161,7 @@ export class PaymentService {
       planInfo: {
         planId: order.planId,
         planName: order.planName,
-        finalAmount: order.finalAmount,
+        finalAmount: formatAmount(Number(order.finalAmount)),
       },
       tradeNo: order.tradeNo,
       paidAt: order.paidAt,
@@ -162,9 +172,12 @@ export class PaymentService {
   async handleAlipayCallback(callbackData: any) {
     const { out_trade_no: orderNo, trade_status, trade_no } = callbackData;
 
+    this.logger.log(`收到支付宝回调: ${orderNo}, 状态: ${trade_status}`);
+
     // 验证签名
     const isValid = await this.alipayService.verifyCallback(callbackData);
     if (!isValid) {
+      this.logger.error(`支付宝回调签名验证失败: ${orderNo}`);
       throw new BadRequestException('无效的回调签名');
     }
 
@@ -191,9 +204,12 @@ export class PaymentService {
   async handleWechatCallback(callbackData: any) {
     const { out_trade_no: orderNo, transaction_id: tradeNo, result_code } = callbackData;
 
+    this.logger.log(`收到微信支付回调: ${orderNo}, 状态: ${result_code}`);
+
     // 验证签名
     const isValid = await this.wechatPayService.verifyCallback(callbackData);
     if (!isValid) {
+      this.logger.error(`微信支付回调签名验证失败: ${orderNo}`);
       throw new BadRequestException('无效的回调签名');
     }
 
@@ -222,64 +238,109 @@ export class PaymentService {
     });
 
     if (!order) {
+      this.logger.error(`处理支付成功时订单不存在: ${orderNo}`);
       throw new NotFoundException('订单不存在');
     }
 
     if (order.paymentStatus === PAYMENT_STATUS.PAID) {
+      this.logger.warn(`订单已处理过: ${orderNo}`);
       return; // 已经处理过了，避免重复处理
     }
 
     const paidAt = new Date();
     const planInfo = SUBSCRIPTION_PLANS[order.planId];
 
-    await this.prisma.$transaction(async (tx) => {
-      // 更新订单状态
-      await tx.order.update({
-        where: { orderNo },
-        data: {
-          paymentStatus: PAYMENT_STATUS.PAID,
-          tradeNo,
-          paidAt,
-        },
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        // 更新订单状态
+        await tx.order.update({
+          where: { orderNo },
+          data: {
+            paymentStatus: PAYMENT_STATUS.PAID,
+            tradeNo,
+            paidAt,
+          },
+        });
+
+        // 标记回调为已处理
+        await tx.paymentCallback.updateMany({
+          where: { orderNo, status: 0 },
+          data: { status: 1, processedAt: paidAt },
+        });
       });
 
-      // 更新用户订阅
-      const endDate = moment(paidAt).add(planInfo.duration, 'months').toDate();
-      await tx.subscription.upsert({
-        where: { userId: order.userId },
-        update: {
-          planId: order.planId,
-          startDate: paidAt,
-          endDate,
-          status: 1, // 激活
-          updatedAt: paidAt,
-        },
-        create: {
-          userId: order.userId,
-          planId: order.planId,
-          startDate: paidAt,
-          endDate,
-          status: 1,
-        },
+      // 调用订阅服务创建订阅
+      await this.createSubscriptionAfterPayment(order.userId, {
+        planId: order.planId,
+        paidPrice: Number(order.finalAmount),
+        startDate: paidAt,
+        autoRenew: false,
       });
 
-      // 标记回调为已处理
-      await tx.paymentCallback.updateMany({
-        where: { orderNo, status: 0 },
-        data: { status: 1, processedAt: paidAt },
+      // 清除订单缓存
+      await this.redis.del(`order:${orderNo}`);
+
+      // 发送支付成功通知
+      await this.queueService.addPaymentSuccessJob({
+        orderNo,
+        userId: order.userId,
+        planId: order.planId,
+        amount: Number(order.finalAmount),
       });
-    });
 
-    // 清除订单缓存
-    await this.redis.del(`order:${orderNo}`);
+      this.logger.log(`支付成功处理完成: ${orderNo}, 用户ID: ${order.userId}`);
 
-    // 发送支付成功通知
-    await this.queueService.addPaymentSuccessJob({
-      orderNo,
-      userId: order.userId,
-      planId: order.planId,
-      amount: order.finalAmount,
-    });
+    } catch (error) {
+      this.logger.error(`处理支付成功失败: ${orderNo}`, error.stack);
+      throw error;
+    }
+  }
+
+  /**
+   * 调用订阅服务创建订阅
+   */
+  private async createSubscriptionAfterPayment(userId: number, subscriptionData: {
+    planId: string;
+    paidPrice: number;
+    startDate: Date;
+    autoRenew: boolean;
+  }) {
+    try {
+      const subscriptionApiUrl = this.configService.get('SUBSCRIPTION_API_URL') || 'http://localhost:3101';
+      const authApiUrl = this.configService.get('AUTH_API_URL') || 'http://localhost:3100';
+
+      // 1. 先获取用户token（服务间调用）
+      const tokenResponse = await firstValueFrom(
+        this.httpService.post(`${authApiUrl}/auth/service-token`, {
+          userId,
+          service: 'payment-api',
+        })
+      );
+
+      const token = tokenResponse.data.data.token;
+
+      // 2. 调用订阅服务创建订阅
+      const response = await firstValueFrom(
+        this.httpService.post(`${subscriptionApiUrl}/subscription`, subscriptionData, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        })
+      );
+
+      if (response.data.code === 201) {
+        this.logger.log(`订阅创建成功: 用户ID ${userId}, 套餐 ${subscriptionData.planId}`);
+        return response.data.data;
+      } else {
+        throw new Error(`订阅创建失败: ${response.data.message}`);
+      }
+
+    } catch (error) {
+      this.logger.error(`调用订阅服务失败: ${error.message}`, error.stack);
+      // 这里可以选择重试或者记录到队列中稍后处理
+      throw error;
+    }
   }
 
   async cancelOrder(orderNo: string, userId: number) {
@@ -309,6 +370,8 @@ export class PaymentService {
 
     // 清除缓存
     await this.redis.del(`order:${orderNo}`);
+
+    this.logger.log(`订单已取消: ${orderNo}`);
 
     return { message: '订单已取消' };
   }
@@ -355,6 +418,7 @@ export class PaymentService {
     return {
       list: orders.map(order => ({
         ...order,
+        finalAmount: formatAmount(Number(order.finalAmount)),
         statusText: statusMap[order.paymentStatus],
       })),
       pagination: {
@@ -367,7 +431,7 @@ export class PaymentService {
   }
 
   async createRefund(createRefundDto: CreateRefundDto) {
-    const { orderNo, refundReason } = createRefundDto;
+    const { orderNo, refundReason, refundAmount } = createRefundDto;
 
     const order = await this.prisma.order.findUnique({
       where: { orderNo },
@@ -391,6 +455,7 @@ export class PaymentService {
     }
 
     const refundNo = generateRefundNo();
+    const actualRefundAmount = refundAmount || Number(order.finalAmount);
     let tradeRefundNo: string;
 
     try {
@@ -399,7 +464,7 @@ export class PaymentService {
         tradeRefundNo = await this.alipayService.refund({
           outTradeNo: orderNo,
           outRequestNo: refundNo,
-          refundAmount: order.finalAmount,
+          refundAmount: actualRefundAmount,
           refundReason,
         });
       } else {
@@ -407,10 +472,11 @@ export class PaymentService {
           outTradeNo: orderNo,
           outRefundNo: refundNo,
           totalFee: Math.round(Number(order.finalAmount) * 100),
-          refundFee: Math.round(Number(order.finalAmount) * 100),
+          refundFee: Math.round(actualRefundAmount * 100),
         });
       }
     } catch (error) {
+      this.logger.error(`退款申请失败: ${orderNo}`, error.stack);
       throw new BadRequestException('退款申请失败');
     }
 
@@ -419,16 +485,18 @@ export class PaymentService {
       data: {
         orderNo,
         refundNo,
-        refundAmount: order.finalAmount,
+        refundAmount: actualRefundAmount,
         refundReason,
         refundStatus: 0,
         tradeRefundNo,
       },
     });
 
+    this.logger.log(`退款申请已提交: ${refundNo}, 金额: ${actualRefundAmount}`);
+
     return {
       refundNo: refund.refundNo,
-      refundAmount: refund.refundAmount,
+      refundAmount: formatAmount(Number(refund.refundAmount)),
       message: '退款申请已提交',
     };
   }
@@ -442,7 +510,13 @@ export class PaymentService {
       'NEW_USER': amount * 0.15,
     };
 
-    return discountMap[couponCode] || 0;
+    const discount = discountMap[couponCode] || 0;
+    
+    if (discount > 0) {
+      this.logger.log(`应用优惠券: ${couponCode}, 折扣金额: ${discount}`);
+    }
+
+    return discount;
   }
 
   async expireOrder(orderNo: string) {
@@ -463,5 +537,7 @@ export class PaymentService {
     });
 
     await this.redis.del(`order:${orderNo}`);
+
+    this.logger.log(`订单已过期: ${orderNo}`);
   }
 }

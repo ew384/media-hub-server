@@ -22,7 +22,6 @@ import { CommonModule } from './common/common.module'; // 数据库、Redis、Em
     HttpModule.register({
       timeout: 5000,
       maxRedirects: 5,
-      retries: 3,
     }),
 
     // 调度模块 (定时任务)
