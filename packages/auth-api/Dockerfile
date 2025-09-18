@@ -1,53 +1,66 @@
-# 多阶段构建
-FROM node:18-alpine AS builder
+# packages/auth-api/Dockerfile
+FROM node:18-alpine AS base
+RUN apk add --no-cache libc6-compat openssl
 
-# 设置工作目录
+# 依赖安装阶段
+FROM base AS deps
 WORKDIR /app
 
-# 复制 package.json 和 package-lock.json (如果可用)
-COPY package*.json ./
-COPY prisma ./prisma/
+# 复制package文件和必要的源码
+COPY packages/auth-api/package*.json ./packages/auth-api/
+COPY packages/shared-database/package*.json ./packages/shared-database/
+COPY packages/shared-database/prisma ./packages/shared-database/prisma
 
-# 安装依赖
-RUN npm ci --only=production && npm cache clean --force
+# 安装shared-database依赖（包含devDependencies，因为需要prisma）
+WORKDIR /app/packages/shared-database
+RUN npm ci
 
-# 生成 Prisma 客户端
-RUN npx prisma generate
+# 安装auth-api依赖（生产环境）
+WORKDIR /app/packages/auth-api
+RUN npm ci --omit=dev
 
-# 复制源代码
-COPY . .
+# 构建阶段
+FROM base AS builder
+WORKDIR /app
+
+# 复制依赖
+COPY --from=deps /app/packages/auth-api/node_modules ./packages/auth-api/node_modules
+COPY --from=deps /app/packages/shared-database/node_modules ./packages/shared-database/node_modules
+
+# 复制源码
+COPY packages/auth-api ./packages/auth-api
+COPY packages/shared-database ./packages/shared-database
+
+# 生成Prisma客户端
+WORKDIR /app/packages/shared-database
+RUN npm run db:generate
 
 # 构建应用
+WORKDIR /app/packages/auth-api
 RUN npm run build
 
-# 生产镜像
-FROM node:18-alpine AS production
-
-# 创建非 root 用户
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S nestjs -u 1001
-
-# 设置工作目录
+# 生产运行阶段
+FROM base AS runner
 WORKDIR /app
 
-# 从 builder 阶段复制文件
-COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
-COPY --from=builder --chown=nestjs:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=nestjs:nodejs /app/prisma ./prisma
-COPY --from=builder --chown=nestjs:nodejs /app/package*.json ./
+# 创建用户
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nestjs
+
+# 只复制生产需要的文件
+COPY --from=builder --chown=nestjs:nodejs /app/packages/auth-api/dist ./dist
+COPY --from=builder --chown=nestjs:nodejs /app/packages/auth-api/package*.json ./
+
+# 重新安装生产依赖（不包含prisma）
+RUN npm ci --omit=dev && npm cache clean --force
 
 # 创建日志目录
 RUN mkdir -p /app/logs && chown -R nestjs:nodejs /app/logs
 
-# 切换到非 root 用户
 USER nestjs
+EXPOSE 3100
 
-# 暴露端口
-EXPOSE 3000
-
-# 健康检查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD curl -f http://localhost:3000/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3100/api/v1/health || exit 1
 
-# 启动命令
 CMD ["node", "dist/main.js"]
