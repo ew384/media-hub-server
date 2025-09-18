@@ -45,41 +45,41 @@ const menuItems: MenuItem[] = [
     key: 'dashboard',
     label: '数据概览',
     icon: <DashboardOutlined />,
-    path: '/dashboard',
+    path: '/dashboard',              // ✅ 保持不变
   },
   {
     key: 'users',
     label: '用户管理',
     icon: <UserOutlined />,
-    path: '/users',
+    path: '/dashboard/users',        // ✅ 修改：添加 /dashboard 前缀
     permission: 'users:read',
   },
   {
     key: 'orders',
     label: '订单管理',
     icon: <ShoppingCartOutlined />,
-    path: '/orders',
+    path: '/dashboard/orders',       // ✅ 修改：添加 /dashboard 前缀
     permission: 'orders:read',
   },
   {
     key: 'subscriptions',
     label: '订阅管理',
     icon: <CrownOutlined />,
-    path: '/subscriptions',
+    path: '/dashboard/subscriptions', // ✅ 修改：添加 /dashboard 前缀
     permission: 'subscriptions:read',
   },
   {
     key: 'analytics',
     label: '数据分析',
     icon: <BarChartOutlined />,
-    path: '/analytics',
+    path: '/dashboard/analytics',    // ✅ 修改：添加 /dashboard 前缀
     permission: 'analytics:read',
   },
   {
     key: 'settings',
     label: '系统设置',
     icon: <SettingOutlined />,
-    path: '/settings',
+    path: '/dashboard/settings',     // ✅ 修改：添加 /dashboard 前缀
     permission: 'settings:read',
   },
 ];
