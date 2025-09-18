@@ -53,7 +53,7 @@ export class SubscriptionController {
   @ApiOperation({ summary: '获取当前用户会员状态' })
   @ApiResponse({ status: 200, description: '获取成功' })
   async getSubscriptionStatus(@CurrentUser() user: any): Promise<ApiResponse<any>> {
-    const data = await this.subscriptionService.getSubscriptionStatus(user.id);
+    const data = await this.subscriptionService.getSubscriptionStatus(user.sub);
     return {
       code: 200,
       message: '获取成功',
@@ -68,7 +68,7 @@ export class SubscriptionController {
     @CurrentUser() user: any,
     @Query() query: SubscriptionQueryDto,
   ): Promise<ApiResponse<any>> {
-    const data = await this.subscriptionService.getSubscriptionHistory(user.id, query);
+    const data = await this.subscriptionService.getSubscriptionHistory(user.sub, query);
     return {
       code: 200,
       message: '获取成功',
@@ -84,7 +84,7 @@ export class SubscriptionController {
     @CurrentUser() user: any,
     @Body() previewDto: PreviewSubscriptionDto,
   ): Promise<ApiResponse<any>> {
-    const data = await this.subscriptionService.previewSubscription(user.id, previewDto);
+    const data = await this.subscriptionService.previewSubscription(user.sub, previewDto);
     return {
       code: 200,
       message: '预览成功',
@@ -99,7 +99,12 @@ export class SubscriptionController {
     @CurrentUser() user: any,
     @Body() createDto: CreateSubscriptionDto,
   ): Promise<ApiResponse<Subscription>> {
-    const data = await this.subscriptionService.createSubscription(user.id, createDto);
+    // 添加调试信息
+    console.log('调试 - Current user:', JSON.stringify(user, null, 2));
+    console.log('调试 - User ID:', user?.id);
+    console.log('调试 - User sub:', user?.sub);
+    console.log('调试 - 完整 user 对象:', user);
+    const data = await this.subscriptionService.createSubscription(user.sub, createDto);
     return {
       code: 201,
       message: '订阅创建成功',
@@ -112,7 +117,7 @@ export class SubscriptionController {
   @ApiResponse({ status: 200, description: '取消成功' })
   @HttpCode(HttpStatus.OK)
   async cancelAutoRenew(@CurrentUser() user: any): Promise<ApiResponse<never>> {
-    await this.subscriptionService.cancelAutoRenew(user.id);
+    await this.subscriptionService.cancelAutoRenew(user.sub);
     return {
       code: 200,
       message: '自动续费已取消'
@@ -124,7 +129,7 @@ export class SubscriptionController {
   @ApiResponse({ status: 200, description: '恢复成功' })
   @HttpCode(HttpStatus.OK)
   async resumeAutoRenew(@CurrentUser() user: any): Promise<ApiResponse<never>> {
-    await this.subscriptionService.resumeAutoRenew(user.id);
+    await this.subscriptionService.resumeAutoRenew(user.sub);
     return {
       code: 200,
       message: '自动续费已恢复'
