@@ -212,80 +212,37 @@ export default function DashboardPage() {
     { type: '月度套餐', value: currentStats.subscriptions.planDistribution.monthly },
     { type: '季度套餐', value: currentStats.subscriptions.planDistribution.quarterly },
     { type: '年度套餐', value: currentStats.subscriptions.planDistribution.yearly },
-  ];
+  ].filter(item => item && item.type && item.value !== undefined) // 过滤无效数据
+   .map(item => ({
+     type: String(item.type), // 确保是字符串
+     value: Number(item.value) || 0, // 确保是数字
+   }));
 
-  // 修复后的饼图配置 - 移除有问题的 spider 配置
-  const planDistributionConfig = {
-    data: planDistributionData,
-    angleField: 'value',
-    colorField: 'type',
-    radius: 0.8,
-    innerRadius: 0.4, // 环形图
-    label: {
-      content: '{name}: {percentage}%',
-      style: {
-        fontSize: 12,
-        textAlign: 'center',
-      },
-    },
-    interactions: [
-      {
-        type: 'element-selected',
-      },
-      {
-        type: 'element-active',
-      },
-    ],
-    color: ['#1890ff', '#52c41a', '#faad14'],
-    legend: {
-      position: 'bottom' as const,
-    },
-    // 添加 tooltip 配置
-    tooltip: {
-      formatter: (datum: any) => {
-        return { name: datum.type, value: `${datum.value} (${((datum.value / planDistributionData.reduce((sum, item) => sum + item.value, 0)) * 100).toFixed(1)}%)` };
-      },
-    },
-  };
 
   // 支付方式分布图表数据
   const paymentMethodData = [
     { type: '支付宝', value: currentStats.payments.methodDistribution.alipay },
     { type: '微信支付', value: currentStats.payments.methodDistribution.wechat },
-  ];
+  ].filter(item => item && item.type && item.value !== undefined) // 过滤无效数据
+   .map(item => ({
+     type: String(item.type), // 确保是字符串
+     value: Number(item.value) || 0, // 确保是数字
+   }));
 
-  // 修复后的饼图配置 - 移除有问题的 spider 配置
+  // 修复后的套餐分布饼图配置 - 最简化配置
+  const planDistributionConfig = {
+    data: planDistributionData,
+    angleField: 'value',
+    colorField: 'type',
+    // 移除所有可能有问题的配置，只保留基础配置
+  };
+
+  // 修复后的支付方式分布饼图配置 - 最简化配置
   const paymentMethodConfig = {
     data: paymentMethodData,
     angleField: 'value',
     colorField: 'type',
-    radius: 0.8,
-    innerRadius: 0.4, // 环形图
-    label: {
-      content: '{name}: {percentage}%',
-      style: {
-        fontSize: 12,
-        textAlign: 'center',
-      },
-    },
-    interactions: [
-      {
-        type: 'element-selected',
-      },
-      {
-        type: 'element-active',
-      },
-    ],
-    color: ['#1890ff', '#52c41a'],
-    legend: {
-      position: 'bottom' as const,
-    },
-    // 添加 tooltip 配置
-    tooltip: {
-      formatter: (datum: any) => {
-        return { name: datum.type, value: `${datum.value}% 占比` };
-      },
-    },
+    // 移除所有可能有问题的配置，只保留基础配置
   };
 
   if (error) {
