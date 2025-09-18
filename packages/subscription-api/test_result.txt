@@ -1,0 +1,247 @@
+[0;35m
+🚀 Subscription API 修复版测试
+📋 测试目标:
+   ✓ 验证与 Auth API 的集成
+   ✓ 检查订阅服务基础功能
+   ✓ 测试认证Token传递
+   ✓ 验证订阅操作完整性
+🌐 Auth API: http://localhost:3100/api/v1
+🌐 Subscription API: http://localhost:3101
+📧 测试邮箱: sub_test_1758176767@example.com
+[0m
+
+[0;35m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;35m1. 认证服务集成测试[0m
+[0;35m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+[0;36m🧪 测试: 检查Auth服务连接[0m
+[0;34m   请求: GET http://localhost:3100/api/v1/health[0m
+[0;34m   ℹ️  HTTP状态码: 200[0m
+[0;32m   ✅ Auth服务连接正常[0m
+
+[0;36m🧪 测试: 注册测试用户[0m
+[0;34m   请求: POST http://localhost:3100/api/v1/auth/register[0m
+[0;34m   ℹ️  HTTP状态码: 201[0m
+{
+  "user": {
+    "id": 26,
+    "username": "订阅测试用户1426",
+    "avatarUrl": null,
+    "status": 1,
+    "createdAt": "2025-09-18T06:26:08.145Z",
+    "updatedAt": "2025-09-18T06:26:08.145Z",
+    "email": "s*****************7@example.com"
+  },
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjI2LCJ0eXBlIjoiYWNjZXNzIiwiaWF0IjoxNzU4MTc2NzY4LCJleHAiOjE3NTgxODAzNjh9.A3bm5lAq9uibvaND-YBm92ACXvIoeotl4WKRpgaHmz8",
+  "refreshToken": "66a21750-30ba-486d-9dcf-54826cc2b621"
+}
+[0;32m   ✅ 用户注册成功，获得Token[0m
+[0;34m   ℹ️  Token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjI2L...[0m
+[0;34m   ℹ️  用户ID: 26[0m
+
+[0;35m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;35m2. 订阅服务连接测试[0m
+[0;35m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+[0;36m🧪 测试: 检查Subscription服务[0m
+[0;34m   请求: GET http://localhost:3101[0m
+[0;34m   ℹ️  HTTP状态码: 404[0m
+[0;32m   ✅ Subscription服务运行中[0m
+
+[0;36m🧪 测试: 健康检查[0m
+[0;34m   请求: GET http://localhost:3101/health[0m
+[0;34m   ℹ️  HTTP状态码: 404[0m
+[0;34m   ℹ️  无健康检查接口或不可访问[0m
+
+[0;35m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;35m3. 公开接口测试[0m
+[0;35m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+[0;36m🧪 测试: 获取会员套餐列表[0m
+[0;34m   请求: GET http://localhost:3101/subscription/plans[0m
+[0;34m   ℹ️  HTTP状态码: 200[0m
+{
+  "code": 200,
+  "message": "获取成功",
+  "data": {
+    "plans": [
+      {
+        "id": "monthly",
+        "name": "包月套餐",
+        "price": 49.9,
+        "duration": 1,
+        "unit": "month",
+        "discount": 0,
+        "features": [
+          "发布功能",
+          "聚合功能",
+          "客服支持"
+        ],
+        "isPopular": false,
+        "originalPrice": 49.9
+      },
+      {
+        "id": "quarterly",
+        "name": "包季套餐",
+        "price": 129,
+        "duration": 3,
+        "unit": "month",
+        "discount": 13.7,
+        "features": [
+          "发布功能",
+          "聚合功能",
+          "客服支持",
+          "优先支持"
+        ],
+        "isPopular": true,
+        "originalPrice": 129
+      },
+      {
+        "id": "yearly",
+        "name": "包年套餐",
+        "price": 459,
+        "duration": 12,
+        "unit": "month",
+        "discount": 23.8,
+        "features": [
+          "发布功能",
+          "聚合功能",
+          "客服支持",
+          "优先支持",
+          "VIP群"
+        ],
+        "isPopular": false,
+        "originalPrice": 459
+      }
+    ]
+  }
+}
+[0;32m   ✅ 套餐列表获取成功 - 包装格式正确[0m
+[0;34m   ℹ️  套餐数量: 3[0m
+[0;32m   ✅ 套餐数据完整[0m
+
+[0;35m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;35m4. 认证集成测试[0m
+[0;35m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+[0;36m🧪 测试: 获取用户订阅状态[0m
+[0;34m   请求: GET http://localhost:3101/subscription/status[0m
+[0;34m   ℹ️  HTTP状态码: 200[0m
+{
+  "code": 200,
+  "message": "获取成功",
+  "data": {
+    "isActive": false,
+    "planId": null,
+    "planName": null,
+    "startDate": null,
+    "endDate": null,
+    "remainingDays": 0,
+    "autoRenew": false,
+    "permissions": [],
+    "features": {}
+  }
+}
+[0;32m   ✅ 订阅状态获取成功 - 认证集成正常[0m
+[0;32m   ✅ 响应格式正确[0m
+
+[0;36m🧪 测试: 获取订阅历史[0m
+[0;34m   请求: GET http://localhost:3101/subscription/history[0m
+[0;34m   ℹ️  HTTP状态码: 200[0m
+[0;32m   ✅ 订阅历史获取成功[0m
+{
+  "code": 200,
+  "message": "获取成功",
+  "data": {
+    "subscriptions": [],
+    "total": 0,
+    "page": 1,
+    "limit": 10
+  }
+}
+
+[0;35m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;35m5. 订阅操作测试[0m
+[0;35m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+[0;36m🧪 测试: 预览订阅[0m
+[0;34m   请求: POST http://localhost:3101/subscription/preview[0m
+[0;34m   ℹ️  HTTP状态码: 200[0m
+{
+  "code": 200,
+  "message": "预览成功",
+  "data": {
+    "planId": "monthly",
+    "planName": "包月套餐",
+    "originalPrice": 49.9,
+    "finalPrice": 49.9,
+    "discount": 0,
+    "startDate": "2025-09-19T00:00:00.000Z",
+    "endDate": "2025-10-19T00:00:00.000Z",
+    "duration": 1,
+    "unit": "month",
+    "features": [
+      "发布功能",
+      "聚合功能",
+      "客服支持"
+    ]
+  }
+}
+[0;32m   ✅ 订阅预览成功[0m
+[0;32m   ✅ 预览数据完整[0m
+
+[0;36m🧪 测试: 创建订阅[0m
+[0;34m   请求: POST http://localhost:3101/subscription[0m
+[0;34m   ℹ️  HTTP状态码: 201[0m
+{
+  "code": 201,
+  "message": "订阅创建成功",
+  "data": {
+    "id": 3,
+    "userId": 26,
+    "planId": "monthly",
+    "planName": "包月套餐",
+    "originalPrice": "49.9",
+    "paidPrice": "49.9",
+    "startDate": "2025-09-18T06:26:08.790Z",
+    "endDate": "2025-10-18T06:26:08.790Z",
+    "status": 1,
+    "autoRenew": false,
+    "createdAt": "2025-09-18T06:26:08.792Z",
+    "updatedAt": "2025-09-18T06:26:08.792Z"
+  }
+}
+[0;32m   ✅ 订阅创建成功[0m
+
+[0;35m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;35m6. 错误处理测试[0m
+[0;35m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+[0;36m🧪 测试: 无效套餐ID预览[0m
+[0;34m   请求: POST http://localhost:3101/subscription/preview[0m
+[0;34m   ℹ️  HTTP状态码: 400[0m
+{
+  "message": "Invalid plan ID",
+  "error": "Bad Request",
+  "statusCode": 400
+}
+[0;32m   ✅ 无效参数错误处理正确[0m
+
+[0;36m🧪 测试: 未认证访问保护接口[0m
+[0;34m   请求: GET http://localhost:3101/subscription/status[0m
+[0;34m   ℹ️  HTTP状态码: 401[0m
+[0;32m   ✅ 未认证访问被正确拒绝[0m
+
+[0;35m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;35m🏁 测试总结[0m
+[0;35m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;32m✅ 通过测试: 13[0m
+[0;31m❌ 失败测试: 0[0m
+[0;34m📊 总计测试: 13[0m
+[0;36m📈 成功率: 100%[0m
+
+[1;33m🔧 问题诊断:[0m
+[0;32m✅ 认证Token获取成功[0m
+
+[0;34m📝 下一步建议:[0m
+[0;32m✅ 订阅服务基本正常，可以继续对接云服务[0m
