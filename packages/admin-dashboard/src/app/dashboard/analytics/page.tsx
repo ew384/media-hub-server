@@ -131,79 +131,104 @@ export default function AnalyticsPage() {
     }
   };
 
-  // 图表配置
+  const processedUserTrends = analyticsData.userTrends.flatMap(item => [
+    { date: item.date, value: item.新增用户, type: '新增用户' },
+    { date: item.date, value: item.活跃用户, type: '活跃用户' }
+  ]);
+
+  // 收入趋势数据 - 确保数据结构正确
+  const processedRevenueTrends = analyticsData.revenueTrends.flatMap(item => [
+    { date: item.date, value: item.收入, type: '收入' },
+    { date: item.date, value: item.订单数, type: '订单数' }
+  ]);
+  const processedPlanDistribution = analyticsData.planDistribution.map(item => ({
+    type: item.type,
+    value: item.value,
+    percentage: item.percentage
+  }));
+
+  // 处理支付方式分布数据 - 确保数据结构正确  
+  const processedPaymentMethods = analyticsData.paymentMethods.map(item => ({
+    type: item.type,
+    value: item.value,
+    percentage: item.percentage
+  }));
+  // 修正后的图表配置
   const userTrendsConfig = {
-    data: analyticsData.userTrends,
+    data: processedUserTrends,  // 使用处理后的数据
     xField: 'date',
     yField: 'value',
     seriesField: 'type',
     smooth: true,
-    animation: {
-      appear: {
-        animation: 'path-in',
-        duration: 1000,
-      },
-    },
     color: ['#1890ff', '#52c41a'],
-    point: {
-      size: 3,
-      shape: 'circle',
-    },
-    legend: {
-      position: 'top',
-    },
-    tooltip: {
-      shared: true,
-      showCrosshairs: true,
-    },
   };
 
   const revenueTrendsConfig = {
-    data: analyticsData.revenueTrends,
-    isGroup: true,
+    data: processedRevenueTrends,  // 使用处理后的数据
     xField: 'date',
     yField: 'value',
     seriesField: 'type',
+    isGroup: true,
     color: ['#1890ff', '#52c41a'],
-    columnWidthRatio: 0.8,
-    legend: {
-      position: 'top',
-    },
-    tooltip: {
-      shared: true,
-    },
   };
 
   const planDistributionConfig = {
-    data: analyticsData.planDistribution,
+    data: processedPlanDistribution, // 使用处理后的数据
     angleField: 'value',
     colorField: 'type',
     radius: 0.8,
     label: {
-      type: 'outer',
-      content: '{name}: {percentage}%',
+      type: 'inner' as const,
+      offset: '-50%',
+      content: '{name}\n{percentage}%',
+      style: {
+        fontSize: 12,
+        textAlign: 'center' as const,
+        fill: '#fff',
+      },
     },
     legend: {
-      position: 'bottom',
+      position: 'bottom' as const,
     },
     color: ['#1890ff', '#52c41a', '#faad14'],
-    interactions: [{ type: 'element-active' }],
+    tooltip: {
+      formatter: (datum: any) => {
+        return { 
+          name: datum.type, 
+          value: `${datum.value} (${datum.percentage}%)` 
+        };
+      },
+    },
   };
 
+  // 修复后的支付方式分布饼图配置
   const paymentMethodsConfig = {
-    data: analyticsData.paymentMethods,
+    data: processedPaymentMethods, // 使用处理后的数据
     angleField: 'value',
     colorField: 'type',
     radius: 0.8,
     label: {
-      type: 'outer',
-      content: '{name}: {percentage}%',
+      type: 'inner' as const,
+      offset: '-50%',
+      content: '{name}\n{percentage}%',
+      style: {
+        fontSize: 12,
+        textAlign: 'center' as const,
+        fill: '#fff',
+      },
     },
     legend: {
-      position: 'bottom',
+      position: 'bottom' as const,
     },
     color: ['#1890ff', '#52c41a'],
-    interactions: [{ type: 'element-active' }],
+    tooltip: {
+      formatter: (datum: any) => {
+        return { 
+          name: datum.type, 
+          value: `${datum.percentage}%` 
+        };
+      },
+    },
   };
 
   // 高价值用户表格列
