@@ -141,18 +141,6 @@ export default function AnalyticsPage() {
     { date: item.date, value: item.收入, type: '收入' },
     { date: item.date, value: item.订单数, type: '订单数' }
   ]);
-  const processedPlanDistribution = analyticsData.planDistribution.map(item => ({
-    type: item.type,
-    value: item.value,
-    percentage: item.percentage
-  }));
-
-  // 处理支付方式分布数据 - 确保数据结构正确  
-  const processedPaymentMethods = analyticsData.paymentMethods.map(item => ({
-    type: item.type,
-    value: item.value,
-    percentage: item.percentage
-  }));
   // 修正后的图表配置
   const userTrendsConfig = {
     data: processedUserTrends,  // 使用处理后的数据
@@ -172,65 +160,77 @@ export default function AnalyticsPage() {
     color: ['#1890ff', '#52c41a'],
   };
 
+  const processedPlanDistribution = analyticsData.planDistribution.map(item => ({
+    name: item.type,
+    type: item.type,
+    value: item.value,
+    percentage: item.percentage
+  }));
+
+  const processedPaymentMethods = analyticsData.paymentMethods.map(item => ({
+    name: item.type,
+    type: item.type,
+    value: item.value,
+    percentage: item.percentage
+  }));
+
   const planDistributionConfig = {
-    data: processedPlanDistribution, // 使用处理后的数据
+    data: processedPlanDistribution,
     angleField: 'value',
     colorField: 'type',
     radius: 0.8,
     label: {
-      type: 'inner' as const,
-      offset: '-50%',
-      content: '{name}\n{percentage}%',
+      content: (data: any, mappingData: any, index: number) => {
+        console.log('标签函数参数:', { data, mappingData, index });
+        
+        // 多种方式尝试获取数据
+        const name = data?.name || data?.type || mappingData?.name || mappingData?.type || '未知';
+        const percentage = data?.percentage || mappingData?.percentage || 0;
+        
+        console.log('提取的值:', { name, percentage });
+        
+        const result = `${name}: ${percentage}%`;
+        console.log('标签结果:', result);
+        return result;
+      },
       style: {
         fontSize: 12,
-        textAlign: 'center' as const,
-        fill: '#fff',
+        fill: '#000',
       },
     },
     legend: {
       position: 'bottom' as const,
     },
     color: ['#1890ff', '#52c41a', '#faad14'],
-    tooltip: {
-      formatter: (datum: any) => {
-        return { 
-          name: datum.type, 
-          value: `${datum.value} (${datum.percentage}%)` 
-        };
-      },
-    },
   };
 
   // 修复后的支付方式分布饼图配置
   const paymentMethodsConfig = {
-    data: processedPaymentMethods, // 使用处理后的数据
+    data: processedPaymentMethods,
     angleField: 'value',
     colorField: 'type',
     radius: 0.8,
     label: {
-      type: 'inner' as const,
-      offset: '-50%',
-      content: '{name}\n{percentage}%',
+      content: (data: any, mappingData: any, index: number) => {
+        console.log('支付标签函数参数:', { data, mappingData, index });
+        
+        const name = data?.name || data?.type || mappingData?.name || mappingData?.type || '未知';
+        const percentage = data?.percentage || mappingData?.percentage || 0;
+        
+        const result = `${name}: ${percentage}%`;
+        console.log('支付标签结果:', result);
+        return result;
+      },
       style: {
         fontSize: 12,
-        textAlign: 'center' as const,
-        fill: '#fff',
+        fill: '#000',
       },
     },
     legend: {
       position: 'bottom' as const,
     },
     color: ['#1890ff', '#52c41a'],
-    tooltip: {
-      formatter: (datum: any) => {
-        return { 
-          name: datum.type, 
-          value: `${datum.percentage}%` 
-        };
-      },
-    },
   };
-
   // 高价值用户表格列
   const topUsersColumns = [
     {
