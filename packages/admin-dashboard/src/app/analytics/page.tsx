@@ -22,12 +22,12 @@ import {
   PieChartOutlined,
   DownloadOutlined,
   ReloadOutlined,
-  TrendingUpOutlined,
-  TrendingDownOutlined,
+  ArrowUpOutlined,
+  ArrowDownOutlined,    // ✅ 替换 TrendingDownOutlined
 } from '@ant-design/icons';
 import { Line, Column, Pie, Area } from '@ant-design/charts';
 import { analyticsApi } from '@/lib/api';
-import { usePermissions } from '@/hooks/useAuth';
+import { usePermissions } from '@/stores/auth';
 import { formatMoney, formatNumber, formatPercentage } from '@/lib/utils';
 import dayjs from 'dayjs';
 
@@ -43,9 +43,8 @@ export default function AnalyticsPage() {
   ]);
   const [selectedMetric, setSelectedMetric] = useState('revenue');
 
-  const { checkPermission } = usePermissions();
-  const canRead = checkPermission('analytics:read');
-
+  const permissions = usePermissions();
+  const canRead = permissions?.checkPermission?.('analytics:read') ?? false;
   // 模拟数据
   const [analyticsData, setAnalyticsData] = useState({
     overview: {
@@ -261,7 +260,7 @@ export default function AnalyticsPage() {
   const getGrowthDisplay = (growth: number) => {
     const isPositive = growth >= 0;
     return {
-      icon: isPositive ? <TrendingUpOutlined /> : <TrendingDownOutlined />,
+      icon: isPositive ?  <ArrowUpOutlined /> : <ArrowDownOutlined />,
       color: isPositive ? '#52c41a' : '#ff4d4f',
       text: `${isPositive ? '+' : ''}${growth.toFixed(1)}%`,
     };
@@ -390,7 +389,6 @@ export default function AnalyticsPage() {
             <Statistic
               title="转化率"
               value={analyticsData.overview.conversionRate}
-              suffix="%"
               precision={1}
               suffix={
                 <div className="flex items-center text-xs ml-2">

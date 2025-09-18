@@ -1,9 +1,10 @@
-// 解决方案3: 改进认证状态管理，防止重复初始化
+// 修复版本：完整的认证状态管理
 // packages/admin-dashboard/src/stores/auth.ts
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { AdminUser, AdminRole, PERMISSIONS } from '@/types';
+import { AdminUser, AdminRole } from '@/types';
+import { USER_ROLES, ROLE_PERMISSIONS, PERMISSIONS } from '@/lib/constants';
 import { authApi } from '@/lib/api';
 
 interface AuthState {
@@ -12,15 +13,13 @@ interface AuthState {
   token: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  isInitialized: boolean; // 新增：标记是否已初始化
+  isInitialized: boolean;
 
   // 操作方法
   login: (credentials: { username: string; password: string }) => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (data: Partial<AdminUser>) => Promise<void>;
   changePassword: (data: { oldPassword: string; newPassword: string }) => Promise<void>;
-  checkPermission: (permission: string) => boolean;
-  hasAnyPermission: (permissions: string[]) => boolean;
   initialize: () => Promise<void>;
   
   // 内部方法
@@ -29,7 +28,7 @@ interface AuthState {
   setLoading: (loading: boolean) => void;
 }
 
-let isInitializing = false; // 防止重复初始化
+let isInitializing = false;
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -57,10 +56,18 @@ export const useAuthStore = create<AuthState>()(
             throw new Error('登录响应中缺少访问令牌');
           }
           
-          console.log('💾 AuthStore: 保存认证状态');
+          // 确保用户有基本的权限信息
+          const userRole = user.role || USER_ROLES.ADMIN;
+          const userWithPermissions = {
+            ...user,
+            role: userRole,
+            permissions: user.permissions || [...(ROLE_PERMISSIONS[userRole as keyof typeof ROLE_PERMISSIONS] || ['*'])]
+          };
+          
+          console.log('💾 AuthStore: 保存认证状态', userWithPermissions);
           
           set({
-            user,
+            user: userWithPermissions,
             token: accessToken,
             isAuthenticated: true,
             isLoading: false,
@@ -70,7 +77,7 @@ export const useAuthStore = create<AuthState>()(
           // 保存到localStorage
           if (typeof window !== 'undefined') {
             localStorage.setItem('admin_token', accessToken);
-            localStorage.setItem('admin_user', JSON.stringify(user));
+            localStorage.setItem('admin_user', JSON.stringify(userWithPermissions));
             console.log('💾 AuthStore: 已保存到 localStorage');
           }
         } catch (error) {
@@ -113,11 +120,12 @@ export const useAuthStore = create<AuthState>()(
 
         try {
           const updatedUser = await authApi.updateProfile(data);
-          set({ user: { ...currentUser, ...updatedUser } });
+          const newUser = { ...currentUser, ...updatedUser };
+          set({ user: newUser });
           
           // 更新localStorage
           if (typeof window !== 'undefined') {
-            localStorage.setItem('admin_user', JSON.stringify({ ...currentUser, ...updatedUser }));
+            localStorage.setItem('admin_user', JSON.stringify(newUser));
           }
         } catch (error) {
           throw error;
@@ -133,23 +141,8 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      // 检查权限 - 简化版本
-      checkPermission: (permission) => {
-        const { user } = get();
-        if (!user) return false;
-        // 简化版：假设管理员有所有权限
-        return true;
-      },
-
-      // 检查是否有任一权限
-      hasAnyPermission: (permissions) => {
-        const { checkPermission } = get();
-        return permissions.some(permission => checkPermission(permission));
-      },
-
-      // 初始化认证状态 - 防重复版本
+      // 初始化认证状态
       initialize: async () => {
-        // 如果已经初始化过或正在初始化，直接返回
         const { isInitialized } = get();
         if (isInitialized || isInitializing) {
           console.log('⏭️ AuthStore: 已初始化或正在初始化，跳过');
@@ -175,10 +168,18 @@ export const useAuthStore = create<AuthState>()(
           if (token && userStr) {
             try {
               const user = JSON.parse(userStr);
-              console.log('✅ AuthStore: 恢复用户状态:', user);
+              
+              // 确保用户有权限信息
+              const userRole = user.role || USER_ROLES.ADMIN;
+              const userWithPermissions = {
+                ...user,
+                permissions: user.permissions || [...(ROLE_PERMISSIONS[userRole as keyof typeof ROLE_PERMISSIONS] || ['*'])]
+              };
+              
+              console.log('✅ AuthStore: 恢复用户状态:', userWithPermissions);
               
               set({
-                user,
+                user: userWithPermissions,
                 token,
                 isAuthenticated: true,
                 isInitialized: true,
@@ -188,7 +189,6 @@ export const useAuthStore = create<AuthState>()(
               
             } catch (parseError) {
               console.error('❌ AuthStore: 解析用户数据失败:', parseError);
-              // 清除无效数据
               localStorage.removeItem('admin_token');
               localStorage.removeItem('admin_user');
               set({
@@ -236,20 +236,43 @@ export const useAuthStore = create<AuthState>()(
   )
 );
 
-// 其余工具函数...
+// 修复后的权限Hook - 确保函数正确实现
 export const usePermissions = () => {
-  const checkPermission = useAuthStore(state => state.checkPermission);
-  const hasAnyPermission = useAuthStore(state => state.hasAnyPermission);
+  const user = useAuthStore(state => state.user);
 
-  const requirePermission = (permission: string) => {
+  const checkPermission = (permission: string): boolean => {
+    console.log('🔍 权限检查:', { permission, user: user?.username, userPermissions: user?.permissions });
+    
+    if (!user || !user.permissions) {
+      console.log('❌ 权限检查失败: 用户未登录或无权限信息');
+      return false;
+    }
+    
+    // 超级管理员拥有所有权限
+    if (user.permissions.includes('*') || user.permissions.includes(PERMISSIONS.ALL)) {
+      console.log('✅ 权限检查通过: 超级管理员权限');
+      return true;
+    }
+    
+    // 检查特定权限
+    const hasPermission = user.permissions.includes(permission);
+    console.log(`${hasPermission ? '✅' : '❌'} 权限检查结果:`, permission, hasPermission);
+    return hasPermission;
+  };
+
+  const hasAnyPermission = (permissions: string[]): boolean => {
+    return permissions.some(permission => checkPermission(permission));
+  };
+
+  const requirePermission = (permission: string): void => {
     if (!checkPermission(permission)) {
-      throw new Error(`Access denied: ${permission}`);
+      throw new Error(`Insufficient permissions: ${permission}`);
     }
   };
 
-  const requireAnyPermission = (permissions: string[]) => {
+  const requireAnyPermission = (permissions: string[]): void => {
     if (!hasAnyPermission(permissions)) {
-      throw new Error(`Access denied: ${permissions.join(' or ')}`);
+      throw new Error(`Insufficient permissions: ${permissions.join(' or ')}`);
     }
   };
 
@@ -261,20 +284,51 @@ export const usePermissions = () => {
   };
 };
 
+// 工具函数保持不变
 export const authUtils = {
   getRoleDisplayName: (role: any): string => {
-    return '管理员';
+    const roleMap: Record<string, string> = {
+      [USER_ROLES.SUPER_ADMIN]: '超级管理员',
+      [USER_ROLES.ADMIN]: '管理员',
+      [USER_ROLES.OPERATOR]: '运营',
+      [USER_ROLES.VIEWER]: '查看者',
+    };
+    return roleMap[role] || '管理员';
   },
+  
   getRoleColor: (role: any): string => {
-    return 'blue';
+    const colorMap: Record<string, string> = {
+      [USER_ROLES.SUPER_ADMIN]: 'red',
+      [USER_ROLES.ADMIN]: 'blue',
+      [USER_ROLES.OPERATOR]: 'green',
+      [USER_ROLES.VIEWER]: 'gray',
+    };
+    return colorMap[role] || 'blue';
   },
+  
   isHighPrivilegeRole: (role: any): boolean => {
-    return true;
+    return [USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN].includes(role);
   },
+  
   getRolePermissions: (role: any): string[] => {
-    return ['*'];
+    return [...(ROLE_PERMISSIONS[role as keyof typeof ROLE_PERMISSIONS] || [])];
   },
+  
   formatPermissions: (permissions: string[]): string[] => {
-    return ['所有权限'];
+    if (permissions.includes('*')) return ['所有权限'];
+    return permissions.map(permission => {
+      const permissionMap: Record<string, string> = {
+        'users:read': '用户查看',
+        'users:write': '用户管理',
+        'orders:read': '订单查看',
+        'orders:write': '订单管理',
+        'subscriptions:read': '订阅查看',
+        'subscriptions:write': '订阅管理',
+        'analytics:read': '数据分析',
+        'settings:read': '设置查看',
+        'settings:write': '设置管理',
+      };
+      return permissionMap[permission] || permission;
+    });
   },
 };

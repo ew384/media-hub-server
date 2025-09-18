@@ -33,7 +33,7 @@ import {
   MoonOutlined,
 } from '@ant-design/icons';
 import zhCN from 'antd/locale/zh_CN';
-import { useAuthStore, authUtils } from '@/stores/auth';
+import { useAuthStore, authUtils, usePermissions } from '@/stores/auth';
 import { MenuItem } from '@/types';
 
 const { Header, Sider, Content } = Layout;
@@ -96,7 +96,8 @@ export default function DashboardLayout({
   const router = useRouter();
   const pathname = usePathname();
   
-  const { user, isAuthenticated, logout, initialize, checkPermission } = useAuthStore();
+  const { user, isAuthenticated, logout, initialize } = useAuthStore();
+  const { checkPermission } = usePermissions(); // ✅ 从权限 hook 获取
 
   // 初始化认证状态 - 修复版本
   useEffect(() => {
@@ -211,7 +212,8 @@ export default function DashboardLayout({
   const getFilteredMenuItems = () => {
     return menuItems.filter(item => {
       if (!item.permission) return true;
-      return checkPermission(item.permission);
+      // ✅ 添加安全检查
+      return typeof checkPermission === 'function' ? checkPermission(item.permission) : true;
     }).map(item => ({
       key: item.key,
       label: item.label,
