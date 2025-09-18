@@ -160,76 +160,35 @@ export default function AnalyticsPage() {
     color: ['#1890ff', '#52c41a'],
   };
 
-  const processedPlanDistribution = analyticsData.planDistribution.map(item => ({
-    name: item.type,
-    type: item.type,
-    value: item.value,
-    percentage: item.percentage
-  }));
+  const processedPlanDistribution = analyticsData.planDistribution
+    .filter(item => item && item.type && item.value !== undefined) // 过滤无效数据
+    .map(item => ({
+      type: String(item.type), // 确保是字符串
+      value: Number(item.value) || 0, // 确保是数字
+    }));
 
-  const processedPaymentMethods = analyticsData.paymentMethods.map(item => ({
-    name: item.type,
-    type: item.type,
-    value: item.value,
-    percentage: item.percentage
-  }));
+  const processedPaymentMethods = analyticsData.paymentMethods
+    .filter(item => item && item.type && item.value !== undefined)
+    .map(item => ({
+      type: String(item.type),
+      value: Number(item.value) || 0,
+    }));
 
+  // 调试输出清理后的数据
+  console.log('清理后的套餐数据:', processedPlanDistribution);
+  console.log('清理后的支付数据:', processedPaymentMethods);
+
+  // 最基础的饼图配置
   const planDistributionConfig = {
     data: processedPlanDistribution,
     angleField: 'value',
     colorField: 'type',
-    radius: 0.8,
-    label: {
-      content: (data: any, mappingData: any, index: number) => {
-        console.log('标签函数参数:', { data, mappingData, index });
-        
-        // 多种方式尝试获取数据
-        const name = data?.name || data?.type || mappingData?.name || mappingData?.type || '未知';
-        const percentage = data?.percentage || mappingData?.percentage || 0;
-        
-        console.log('提取的值:', { name, percentage });
-        
-        const result = `${name}: ${percentage}%`;
-        console.log('标签结果:', result);
-        return result;
-      },
-      style: {
-        fontSize: 12,
-        fill: '#000',
-      },
-    },
-    legend: {
-      position: 'bottom' as const,
-    },
-    color: ['#1890ff', '#52c41a', '#faad14'],
   };
 
-  // 修复后的支付方式分布饼图配置
   const paymentMethodsConfig = {
     data: processedPaymentMethods,
     angleField: 'value',
     colorField: 'type',
-    radius: 0.8,
-    label: {
-      content: (data: any, mappingData: any, index: number) => {
-        console.log('支付标签函数参数:', { data, mappingData, index });
-        
-        const name = data?.name || data?.type || mappingData?.name || mappingData?.type || '未知';
-        const percentage = data?.percentage || mappingData?.percentage || 0;
-        
-        const result = `${name}: ${percentage}%`;
-        console.log('支付标签结果:', result);
-        return result;
-      },
-      style: {
-        fontSize: 12,
-        fill: '#000',
-      },
-    },
-    legend: {
-      position: 'bottom' as const,
-    },
-    color: ['#1890ff', '#52c41a'],
   };
   // 高价值用户表格列
   const topUsersColumns = [
