@@ -5,8 +5,9 @@ RUN apk add --no-cache libc6-compat
 # 依赖安装阶段
 FROM base AS deps
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production
+COPY packages/admin-dashboard/package.json ./
+COPY packages/admin-dashboard/package-lock.json ./
+RUN npm install --only=production
 
 # 构建阶段  
 FROM base AS builder

@@ -44,7 +44,7 @@ build_all() {
     mkdir -p logs/{auth,payment,subscription,nginx}
     
     # 构建服务
-    docker compose build --no-cache
+    docker compose build #--no-cache
     print_success "所有服务构建完成"
 }
 
