@@ -19,12 +19,23 @@ import { AppService } from './app.service';
       envFilePath: ['.env.local', '.env'],
     }),
 
-    // 限流模块
+    // 限流模块 - 修复配置
     ThrottlerModule.forRoot({
       throttlers: [
         {
-          ttl: parseInt(process.env.THROTTLE_TTL || '60') * 1000,
-          limit: parseInt(process.env.THROTTLE_LIMIT || '100'),
+          name: 'short',
+          ttl: 60 * 1000,   // 1分钟
+          limit: 15,        // 最多15次请求
+        },
+        {
+          name: 'medium', 
+          ttl: 15 * 60 * 1000,  // 15分钟
+          limit: 50,            // 最多50次请求
+        },
+        {
+          name: 'long',
+          ttl: 60 * 60 * 1000,  // 1小时
+          limit: 100,           // 最多100次请求
         },
       ],
     }),

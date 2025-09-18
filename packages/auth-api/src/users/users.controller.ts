@@ -4,6 +4,7 @@ import { UsersService } from './users.service';
 import { UpdateProfileDto } from '../auth/dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { RawResponse } from '../common/interceptors'; // 导入装饰器
 
 @ApiTags('用户')
 @ApiBearerAuth('JWT-auth')
@@ -13,12 +14,14 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get('profile')
+  @RawResponse() // 跳过响应包装
   @ApiOperation({ summary: '获取用户资料' })
   async getProfile(@CurrentUser() user: any) {
     return this.usersService.findById(user.id);
   }
 
   @Put('profile')
+  @RawResponse() // 跳过响应包装
   @ApiOperation({ summary: '更新用户资料' })
   async updateProfile(
     @CurrentUser() user: any,
@@ -26,7 +29,4 @@ export class UsersController {
   ) {
     return this.usersService.updateProfile(user.id, updateProfileDto);
   }
-  
-  // 用户相关的其他接口可以在这里添加
-  // 如：获取用户列表、管理员功能等
 }

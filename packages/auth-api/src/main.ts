@@ -1,4 +1,4 @@
-import { NestFactory } from '@nestjs/core';
+import { NestFactory, Reflector } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
@@ -37,8 +37,9 @@ async function bootstrap() {
   app.useGlobalFilters(new HttpExceptionFilter());
 
   // 全局拦截器 - 响应格式化和日志
+  const reflector = app.get(Reflector);  // ← 获取 Reflector 实例
   app.useGlobalInterceptors(
-    new TransformInterceptor(),
+    new TransformInterceptor(reflector),  // ← 传入 reflector 参数
     new LoggingInterceptor(),
   );
 

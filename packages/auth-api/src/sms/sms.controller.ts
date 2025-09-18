@@ -12,7 +12,7 @@ import { ThrottlerGuard } from '@nestjs/throttler';
 import { SmsService } from './sms.service';
 import { GetClientIp } from '../common/decorators/get-client-ip.decorator';
 import { SendSmsDto, VerifySmsDto, SmsResponseDto } from './dto';
-
+import { Throttle } from '@nestjs/throttler';
 @ApiTags('短信')
 @Controller('sms')
 @UseGuards(ThrottlerGuard)
@@ -21,6 +21,7 @@ export class SmsController {
 
   @Post('send')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ short: { limit: 1, ttl: 60000 } }) // 1分钟最多1次发送
   @ApiOperation({ summary: '发送短信验证码' })
   @ApiResponse({
     status: 200,
@@ -39,6 +40,7 @@ export class SmsController {
 
   @Post('verify')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ short: { limit: 5, ttl: 60000 } }) // 1分钟最多5次验证
   @ApiOperation({ summary: '验证短信验证码' })
   @ApiResponse({
     status: 200,

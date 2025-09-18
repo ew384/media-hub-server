@@ -18,6 +18,7 @@ import { UsersService } from '../users/users.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { GetClientIp } from '../common/decorators/get-client-ip.decorator';
+import { RawResponse } from '../common/interceptors'; // 导入装饰器
 import {
   RegisterDto,
   LoginDto,
@@ -26,7 +27,7 @@ import {
   AuthResponseDto,
   UserResponseDto,
 } from './dto';
-
+import { Throttle } from '@nestjs/throttler';
 @ApiTags('认证')
 @Controller('auth')
 @UseGuards(ThrottlerGuard)
@@ -38,15 +39,9 @@ export class AuthController {
 
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
+  @RawResponse() // 跳过响应包装
+  @Throttle({ short: { limit: 3, ttl: 60000 } }) // 1分钟最多3次注册
   @ApiOperation({ summary: '用户注册' })
-  @ApiResponse({
-    status: 201,
-    description: '注册成功',
-    type: AuthResponseDto,
-  })
-  @ApiResponse({ status: 400, description: '参数错误' })
-  @ApiResponse({ status: 409, description: '用户已存在' })
-  @ApiResponse({ status: 429, description: '请求过于频繁' })
   async register(
     @Body() registerDto: RegisterDto,
     @GetClientIp() ip: string,
@@ -56,15 +51,9 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @RawResponse() // 跳过响应包装
+  @Throttle({ short: { limit: 5, ttl: 60000 } })
   @ApiOperation({ summary: '用户登录' })
-  @ApiResponse({
-    status: 200,
-    description: '登录成功',
-    type: AuthResponseDto,
-  })
-  @ApiResponse({ status: 401, description: '认证失败' })
-  @ApiResponse({ status: 403, description: '账号被禁用或登录次数超限' })
-  @ApiResponse({ status: 429, description: '请求过于频繁' })
   async login(
     @Body() loginDto: LoginDto,
     @GetClientIp() ip: string,
@@ -74,13 +63,8 @@ export class AuthController {
 
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
+  @RawResponse() // 跳过响应包装
   @ApiOperation({ summary: '刷新访问令牌' })
-  @ApiResponse({
-    status: 200,
-    description: '刷新成功',
-    type: AuthResponseDto,
-  })
-  @ApiResponse({ status: 401, description: 'Refresh Token 无效' })
   async refreshToken(
     @Body() refreshTokenDto: RefreshTokenDto,
   ): Promise<AuthResponseDto> {
@@ -92,8 +76,6 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: '用户退出登录' })
-  @ApiResponse({ status: 204, description: '退出成功' })
-  @ApiResponse({ status: 401, description: '未认证' })
   async logout(@Req() req: Request): Promise<void> {
     const refreshToken = req.body?.refreshToken;
     if (refreshToken) {
@@ -103,30 +85,18 @@ export class AuthController {
 
   @Get('profile')
   @UseGuards(JwtAuthGuard)
+  @RawResponse() // 跳过响应包装 
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: '获取当前用户信息' })
-  @ApiResponse({
-    status: 200,
-    description: '获取成功',
-    type: UserResponseDto,
-  })
-  @ApiResponse({ status: 401, description: '未认证' })
   async getProfile(@CurrentUser() user: UserResponseDto): Promise<UserResponseDto> {
     return this.usersService.findById(user.id);
   }
 
   @Put('profile')
   @UseGuards(JwtAuthGuard)
+  @RawResponse() // 跳过响应包装
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: '更新当前用户信息' })
-  @ApiResponse({
-    status: 200,
-    description: '更新成功',
-    type: UserResponseDto,
-  })
-  @ApiResponse({ status: 400, description: '参数错误' })
-  @ApiResponse({ status: 401, description: '未认证' })
-  @ApiResponse({ status: 409, description: '用户名已存在' })
   async updateProfile(
     @CurrentUser() user: UserResponseDto,
     @Body() updateProfileDto: UpdateProfileDto,
