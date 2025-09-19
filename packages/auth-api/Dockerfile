@@ -1,13 +1,12 @@
-# packages/auth-api/Dockerfile - 最小修复版本
-FROM node:18-alpine AS base
+# packages/auth-api/Dockerfile - Debian版本
+FROM node:18-bullseye-slim AS base
 
-# 添加必要的构建依赖解决原生模块编译问题
-RUN apk add --no-cache \
-    libc6-compat \
+# 安装必要的系统依赖
+RUN apt-get update && apt-get install -y \
     openssl \
-    python3 \
-    make \
-    g++
+    ca-certificates \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
 
 # 依赖安装阶段
 FROM base AS deps
@@ -29,7 +28,7 @@ RUN npm run db:generate
 WORKDIR /app
 COPY packages/auth-api/package*.json ./packages/auth-api/
 
-# 安装 auth-api 依赖 - 重新编译原生模块
+# 安装 auth-api 依赖
 WORKDIR /app/packages/auth-api
 RUN npm ci --omit=dev
 
@@ -44,7 +43,7 @@ COPY --from=deps /app/packages/shared-database ./packages/shared-database
 COPY --from=deps /app/packages/auth-api/node_modules ./packages/auth-api/node_modules
 COPY packages/auth-api ./packages/auth-api
 
-# 保持原有的符号链接方式
+# 确保 shared-database 在正确位置被识别
 WORKDIR /app/packages/auth-api
 RUN ln -sf ../../packages/shared-database ./node_modules/@media-hub/database
 
@@ -56,8 +55,8 @@ FROM base AS runner
 WORKDIR /app
 
 # 创建用户
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nestjs
+RUN groupadd --system --gid 1001 nodejs
+RUN useradd --system --uid 1001 --gid nodejs nestjs
 
 # 复制构建产物和依赖
 COPY --from=builder --chown=nestjs:nodejs /app/packages/auth-api/dist ./dist
@@ -73,7 +72,6 @@ RUN mkdir -p /app/logs && chown -R nestjs:nodejs /app/logs
 USER nestjs
 EXPOSE 3100
 
-# 保持原有健康检查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3100/api/v1/health || exit 1
 

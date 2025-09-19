@@ -5,6 +5,7 @@ export const PAYMENT_STATUS = {
   REFUNDED: 2,    // 已退款
   CANCELLED: 3,   // 已取消
   EXPIRED: 4,     // 已过期
+  FAILED: 5,      // 支付失败
 } as const;
 
 export const PAYMENT_METHOD = {

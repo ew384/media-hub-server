@@ -136,9 +136,21 @@ export class PaymentService {
     if (!order) {
       throw new NotFoundException('订单不存在');
     }
-
+    // 🔥 检查状态变化标记 - 核心逻辑
+    const statusChangeKey = `order_status_changed:${orderNo}`;
+    const hasStatusChanged = await this.redis.exists(statusChangeKey);
+    
+    let statusChanged = false;
+    if (hasStatusChanged) {
+      // 有状态变化标记，清除它并标记状态已变化
+      await this.redis.del(statusChangeKey);
+      statusChanged = true;
+      
+      this.logger.log(`🔥 检测到订单状态变化: ${orderNo}`);
+    }
     const statusMap = {
       [PAYMENT_STATUS.PENDING]: '待支付',
+      [PAYMENT_STATUS.FAILED]: '支付失败',
       [PAYMENT_STATUS.PAID]: '已支付',
       [PAYMENT_STATUS.REFUNDED]: '已退款',
       [PAYMENT_STATUS.CANCELLED]: '已取消',
@@ -166,6 +178,11 @@ export class PaymentService {
       tradeNo: order.tradeNo,
       paidAt: order.paidAt,
       subscription,
+      // 🔥 关键：状态变化标识
+      statusChanged,
+      lastUpdated: order.updatedAt,
+      // 🔥 新增：变化类型（用于前端优化显示）
+      changeType: statusChanged ? this.getChangeType(order.paymentStatus) : null      
     };
   }
 
@@ -269,6 +286,18 @@ export class PaymentService {
         });
       });
 
+      // 🔥 关键：设置状态变化标记（30秒过期）
+      const statusChangeKey = `order_status_changed:${orderNo}`;
+      await this.redis.setex(statusChangeKey, 30, JSON.stringify({
+        orderNo,
+        fromStatus: PAYMENT_STATUS.PENDING,
+        toStatus: PAYMENT_STATUS.PAID,
+        changedAt: paidAt.toISOString(),
+        tradeNo
+      }));
+
+      this.logger.log(`✅ 支付成功状态变化标记已设置: ${orderNo}`);
+
       // 调用订阅服务创建订阅
       await this.createSubscriptionAfterPayment(order.userId, {
         planId: order.planId,
@@ -293,6 +322,22 @@ export class PaymentService {
     } catch (error) {
       this.logger.error(`处理支付成功失败: ${orderNo}`, error.stack);
       throw error;
+    }
+  }
+
+  // 🔥 新增：获取变化类型
+  private getChangeType(paymentStatus: number): string {
+    switch (paymentStatus) {
+      case PAYMENT_STATUS.PAID:
+        return 'payment_success';
+      case PAYMENT_STATUS.FAILED:
+        return 'payment_failed';
+      case PAYMENT_STATUS.CANCELLED:
+        return 'payment_cancelled';
+      case PAYMENT_STATUS.EXPIRED:
+        return 'payment_expired';
+      default:
+        return 'status_update';
     }
   }
 
@@ -367,6 +412,16 @@ export class PaymentService {
         updatedAt: new Date(),
       },
     });
+
+    // 🔥 设置状态变化标记
+    const statusChangeKey = `order_status_changed:${orderNo}`;
+    await this.redis.setex(statusChangeKey, 30, JSON.stringify({
+      orderNo,
+      fromStatus: PAYMENT_STATUS.PENDING,
+      toStatus: PAYMENT_STATUS.CANCELLED,
+      changedAt: new Date().toISOString(),
+      reason: 'user_cancelled'
+    }));
 
     // 清除缓存
     await this.redis.del(`order:${orderNo}`);
@@ -535,6 +590,16 @@ export class PaymentService {
         updatedAt: new Date(),
       },
     });
+
+    // 🔥 设置状态变化标记
+    const statusChangeKey = `order_status_changed:${orderNo}`;
+    await this.redis.setex(statusChangeKey, 30, JSON.stringify({
+      orderNo,
+      fromStatus: PAYMENT_STATUS.PENDING,
+      toStatus: PAYMENT_STATUS.EXPIRED,
+      changedAt: new Date().toISOString(),
+      reason: 'timeout'
+    }));
 
     await this.redis.del(`order:${orderNo}`);
 
