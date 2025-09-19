@@ -47,7 +47,7 @@ RUN npm run build
 # 生产运行阶段
 FROM base AS runner
 WORKDIR /app
-
+RUN apk add --no-cache wget
 # 创建用户
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nestjs
