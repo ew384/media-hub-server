@@ -1,4 +1,4 @@
-# packages/auth-api/Dockerfile
+# packages/auth-api/Dockerfile - 修复版本
 FROM node:18-alpine AS base
 RUN apk add --no-cache libc6-compat openssl
 
@@ -6,16 +6,23 @@ RUN apk add --no-cache libc6-compat openssl
 FROM base AS deps
 WORKDIR /app
 
-# 复制package文件和必要的源码
-COPY packages/auth-api/package*.json ./packages/auth-api/
+# 首先复制并构建 shared-database
 COPY packages/shared-database/package*.json ./packages/shared-database/
 COPY packages/shared-database/prisma ./packages/shared-database/prisma
+COPY packages/shared-database/src ./packages/shared-database/src
+COPY packages/shared-database/tsconfig.json ./packages/shared-database/
 
-# 安装shared-database依赖（包含devDependencies，因为需要prisma）
+# 安装 shared-database 依赖并构建
 WORKDIR /app/packages/shared-database
 RUN npm ci
+RUN npm run build
+RUN npm run db:generate
 
-# 安装auth-api依赖（生产环境）
+# 复制 auth-api 的 package.json
+WORKDIR /app
+COPY packages/auth-api/package*.json ./packages/auth-api/
+
+# 安装 auth-api 依赖
 WORKDIR /app/packages/auth-api
 RUN npm ci --omit=dev
 
@@ -23,20 +30,18 @@ RUN npm ci --omit=dev
 FROM base AS builder
 WORKDIR /app
 
-# 复制依赖
+# 复制构建好的 shared-database
+COPY --from=deps /app/packages/shared-database ./packages/shared-database
+
+# 复制 auth-api 依赖和源码
 COPY --from=deps /app/packages/auth-api/node_modules ./packages/auth-api/node_modules
-COPY --from=deps /app/packages/shared-database/node_modules ./packages/shared-database/node_modules
-
-# 复制源码
 COPY packages/auth-api ./packages/auth-api
-COPY packages/shared-database ./packages/shared-database
 
-# 生成Prisma客户端
-WORKDIR /app/packages/shared-database
-RUN npm run db:generate
-
-# 构建应用
+# 确保 shared-database 在正确位置被识别
 WORKDIR /app/packages/auth-api
+RUN ln -sf ../../packages/shared-database ./node_modules/@media-hub/database
+
+# 构建 auth-api
 RUN npm run build
 
 # 生产运行阶段
@@ -47,12 +52,13 @@ WORKDIR /app
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nestjs
 
-# 只复制生产需要的文件
+# 复制构建产物和依赖
 COPY --from=builder --chown=nestjs:nodejs /app/packages/auth-api/dist ./dist
 COPY --from=builder --chown=nestjs:nodejs /app/packages/auth-api/package*.json ./
+COPY --from=builder --chown=nestjs:nodejs /app/packages/auth-api/node_modules ./node_modules
 
-# 重新安装生产依赖（不包含prisma）
-RUN npm ci --omit=dev && npm cache clean --force
+# 确保 shared-database 在运行时也能找到
+COPY --from=builder --chown=nestjs:nodejs /app/packages/shared-database ./node_modules/@media-hub/database
 
 # 创建日志目录
 RUN mkdir -p /app/logs && chown -R nestjs:nodejs /app/logs
