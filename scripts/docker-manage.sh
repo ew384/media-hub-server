@@ -85,12 +85,12 @@ start_infra() {
     fi
     
     print_info "启动基础设施服务（数据库、缓存）..."
-    docker compose -f docker compose.dev.yml up -d
+    docker compose -f docker-compose.dev.yml up -d
     
     # 等待服务启动
     print_info "等待数据库服务就绪..."
     for i in {1..30}; do
-        if docker compose -f docker compose.dev.yml exec -T postgres pg_isready -U postgres >/dev/null 2>&1; then
+        if docker compose -f docker-compose.dev.yml exec -T postgres pg_isready -U postgres >/dev/null 2>&1; then
             print_success "数据库已就绪"
             break
         fi
@@ -136,7 +136,7 @@ stop_apps() {
 # 停止基础设施服务
 stop_infra() {
     print_info "停止基础设施服务..."
-    docker compose -f docker compose.dev.yml down
+    docker compose -f docker-compose.dev.yml down
     print_success "基础设施服务已停止"
 }
 
@@ -144,7 +144,7 @@ stop_infra() {
 stop_all() {
     print_info "停止所有服务..."
     docker compose down
-    docker compose -f docker compose.dev.yml down
+    docker compose -f docker-compose.dev.yml down
     print_success "所有服务已停止"
 }
 
