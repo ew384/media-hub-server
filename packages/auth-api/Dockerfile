@@ -1,6 +1,13 @@
-# packages/auth-api/Dockerfile - 修复版本
+# packages/auth-api/Dockerfile - 最小修复版本
 FROM node:18-alpine AS base
-RUN apk add --no-cache libc6-compat openssl
+
+# 添加必要的构建依赖解决原生模块编译问题
+RUN apk add --no-cache \
+    libc6-compat \
+    openssl \
+    python3 \
+    make \
+    g++
 
 # 依赖安装阶段
 FROM base AS deps
@@ -22,7 +29,7 @@ RUN npm run db:generate
 WORKDIR /app
 COPY packages/auth-api/package*.json ./packages/auth-api/
 
-# 安装 auth-api 依赖
+# 安装 auth-api 依赖 - 重新编译原生模块
 WORKDIR /app/packages/auth-api
 RUN npm ci --omit=dev
 
@@ -37,7 +44,7 @@ COPY --from=deps /app/packages/shared-database ./packages/shared-database
 COPY --from=deps /app/packages/auth-api/node_modules ./packages/auth-api/node_modules
 COPY packages/auth-api ./packages/auth-api
 
-# 确保 shared-database 在正确位置被识别
+# 保持原有的符号链接方式
 WORKDIR /app/packages/auth-api
 RUN ln -sf ../../packages/shared-database ./node_modules/@media-hub/database
 
@@ -66,6 +73,7 @@ RUN mkdir -p /app/logs && chown -R nestjs:nodejs /app/logs
 USER nestjs
 EXPOSE 3100
 
+# 保持原有健康检查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3100/api/v1/health || exit 1
 

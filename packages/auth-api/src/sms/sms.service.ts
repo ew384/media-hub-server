@@ -16,28 +16,50 @@ import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class SmsService {
-  private readonly client: Dysmsapi;
+  private readonly client: Dysmsapi | null;
   private readonly signName: string;
   private readonly templateCode: string;
   private readonly codeExpireTime: number;
   private readonly dailyLimit: number;
   private readonly rateLimitPerMinute: number;
+  private readonly isMockMode: boolean;
+  private readonly smsProvider: string;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
   ) {
-    // 初始化阿里云短信客户端
-    const config = new $OpenApi.Config({
-      accessKeyId: this.configService.get('ALIYUN_ACCESS_KEY_ID'),
-      accessKeySecret: this.configService.get('ALIYUN_ACCESS_KEY_SECRET'),
-      endpoint: 'dysmsapi.aliyuncs.com',
-    });
-    this.client = new Dysmsapi(config);
+    // 检查是否为Mock模式
+    this.smsProvider = this.configService.get('SMS_PROVIDER', 'aliyun');
+    this.isMockMode = this.smsProvider === 'mock' || 
+                      this.configService.get('MOCK_EXTERNAL_SERVICES') === 'true';
 
-    this.signName = this.configService.get('ALIYUN_SMS_SIGN_NAME');
-    this.templateCode = this.configService.get('ALIYUN_SMS_TEMPLATE_CODE');
+    console.log(`📱 SMS服务模式: ${this.isMockMode ? 'Mock模式' : '阿里云模式'}`);
+
+    // 只在非Mock模式下初始化阿里云客户端
+    if (!this.isMockMode) {
+      const accessKeyId = this.configService.get('ALIYUN_ACCESS_KEY_ID');
+      const accessKeySecret = this.configService.get('ALIYUN_ACCESS_KEY_SECRET');
+      
+      if (!accessKeyId || !accessKeySecret) {
+        console.warn('⚠️  阿里云SMS配置不完整，将使用Mock模式');
+        this.isMockMode = true;
+        this.client = null;
+      } else {
+        const config = new $OpenApi.Config({
+          accessKeyId,
+          accessKeySecret,
+          endpoint: 'dysmsapi.aliyuncs.com',
+        });
+        this.client = new Dysmsapi(config);
+      }
+    } else {
+      this.client = null;
+    }
+
+    this.signName = this.configService.get('ALIYUN_SMS_SIGN_NAME', 'Mock签名');
+    this.templateCode = this.configService.get('ALIYUN_SMS_TEMPLATE_CODE', 'SMS_000000');
     this.codeExpireTime = this.configService.get('SMS_CODE_EXPIRE_TIME', 300);
     this.dailyLimit = this.configService.get('SMS_DAILY_LIMIT', 10);
     this.rateLimitPerMinute = this.configService.get('SMS_RATE_LIMIT_PER_MINUTE', 3);
@@ -61,7 +83,7 @@ export class SmsService {
     const code = this.generateCode();
 
     try {
-      // 发送短信
+      // 发送短信（Mock或真实）
       await this.sendSms(phone, code);
 
       // 保存验证码到数据库
@@ -93,6 +115,12 @@ export class SmsService {
     code: string,
     scene: 'register' | 'login' | 'reset_password',
   ): Promise<boolean> {
+    // Mock模式下的特殊验证码
+    if (this.isMockMode && code === '123456') {
+      console.log(`🧪 Mock模式: 验证码验证通过 - ${phone}`);
+      return true;
+    }
+
     const smsCode = await this.prisma.smsCode.findFirst({
       where: {
         phone,
@@ -132,7 +160,6 @@ export class SmsService {
     const ipCount = await this.cacheManager.get<number>(ipKey) || 0;
 
     if (phoneCount >= this.rateLimitPerMinute || ipCount >= this.rateLimitPerMinute) {
-      // 修复：使用HttpException替代不存在的TooManyRequestsException
       throw new HttpException('发送过于频繁，请稍后再试', HttpStatus.TOO_MANY_REQUESTS);
     }
   }
@@ -157,7 +184,6 @@ export class SmsService {
     });
 
     if (count >= this.dailyLimit) {
-      // 修复：使用HttpException替代不存在的TooManyRequestsException
       throw new HttpException('今日发送次数已达上限', HttpStatus.TOO_MANY_REQUESTS);
     }
   }
@@ -185,9 +211,29 @@ export class SmsService {
   }
 
   /**
-   * 发送短信到阿里云
+   * 发送短信到阿里云或Mock
    */
   private async sendSms(phone: string, code: string): Promise<void> {
+    if (this.isMockMode) {
+      // Mock模式 - 模拟发送
+      console.log(`🧪 Mock模式: 发送短信到 ${phone}, 验证码: ${code}`);
+      
+      // 模拟网络延迟
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // 模拟偶尔的发送失败（用于测试错误处理）
+      if (Math.random() < 0.05) { // 5% 失败率
+        throw new Error('Mock模式: 模拟短信发送失败');
+      }
+      
+      return;
+    }
+
+    // 真实阿里云模式
+    if (!this.client) {
+      throw new Error('阿里云SMS客户端未初始化');
+    }
+
     const sendSmsRequest = new $Dysmsapi.SendSmsRequest({
       phoneNumbers: phone,
       signName: this.signName,
@@ -197,12 +243,12 @@ export class SmsService {
 
     try {
       const response = await this.client.sendSms(sendSmsRequest);
-      
+
       if (response.body.code !== 'OK') {
         throw new Error(`阿里云短信发送失败: ${response.body.message}`);
       }
 
-      console.log(`短信发送成功: ${phone}, 验证码: ${code}`);
+      console.log(`📱 短信发送成功: ${phone}, 验证码: ${code}`);
     } catch (error) {
       console.error('阿里云短信API调用失败:', error);
       throw error;
@@ -220,5 +266,15 @@ export class SmsService {
         },
       },
     });
+  }
+
+  /**
+   * 获取Mock模式验证码（仅用于开发测试）
+   */
+  getMockVerificationCode(): string {
+    if (!this.isMockMode) {
+      throw new Error('仅在Mock模式下可用');
+    }
+    return '123456';
   }
 }
