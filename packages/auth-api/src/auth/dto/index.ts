@@ -185,3 +185,4 @@ export class AuthResponseDto {
   @ApiProperty({ description: 'Refresh Token', example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' })
   refreshToken: string;
 }
+export * from './wechat.dto';
