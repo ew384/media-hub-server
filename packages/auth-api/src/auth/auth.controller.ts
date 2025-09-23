@@ -26,12 +26,15 @@ import {
   LoginDto,
   RefreshTokenDto,
   UpdateProfileDto,
+  ChangePhoneDto,      // 🔥 新增
+  ChangePasswordDto,   // 🔥 新增
   AuthResponseDto,
   UserResponseDto,
   WechatLoginDto,
   WechatBindDto,
 } from './dto';
 import { Throttle } from '@nestjs/throttler';
+
 @ApiTags('认证')
 @Controller('auth')
 @UseGuards(ThrottlerGuard)
@@ -106,6 +109,41 @@ export class AuthController {
     @Body() updateProfileDto: UpdateProfileDto,
   ): Promise<UserResponseDto> {
     return this.usersService.updateProfile(user.id, updateProfileDto);
+  }
+
+  // 🔥 新增：更换手机号接口
+  @Put('change-phone')
+  @UseGuards(JwtAuthGuard)
+  @RawResponse()
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: '更换手机号' })
+  @ApiResponse({
+    status: 200,
+    description: '手机号更换成功',
+    type: UserResponseDto,
+  })
+  @ApiResponse({ status: 400, description: '验证码错误或参数无效' })
+  @ApiResponse({ status: 409, description: '手机号已被使用' })
+  async changePhone(
+    @CurrentUser() user: UserResponseDto,
+    @Body() changePhoneDto: ChangePhoneDto,
+  ): Promise<UserResponseDto> {
+    return this.authService.changePhone(user.id, changePhoneDto);
+  }
+
+  // 🔥 新增：修改密码接口
+  @Put('change-password')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: '修改密码' })
+  @ApiResponse({ status: 204, description: '密码修改成功' })
+  @ApiResponse({ status: 400, description: '当前密码错误或参数无效' })
+  async changePassword(
+    @CurrentUser() user: UserResponseDto,
+    @Body() changePasswordDto: ChangePasswordDto,
+  ): Promise<void> {
+    await this.authService.changePassword(user.id, changePasswordDto);
   }
 
   /**

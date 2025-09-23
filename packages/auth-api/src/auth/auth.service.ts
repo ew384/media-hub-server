@@ -1,9 +1,11 @@
 import {
   Injectable,
+  NotFoundException,
   UnauthorizedException,
   ConflictException,
   BadRequestException,
   ForbiddenException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -21,7 +23,9 @@ import {
   WechatLoginDto, 
   WechatBindDto,
   WechatLoginUrlDto,
-  WechatBindStatusDto
+  ChangePhoneDto, 
+  ChangePasswordDto,
+  WechatBindStatusDto 
   } from './dto';
 
 @Injectable()
@@ -51,50 +55,305 @@ export class AuthService {
       redirectUrl: this.configService.get('WECHAT_REDIRECT_URL', 'http://localhost:3409/#/login/callback'),
     };
   }
+
   /**
-   * 获取微信登录URL
+   * 更换手机号
    */
-  async getWechatLoginUrl(redirectUrl?: string, ip?: string): Promise<WechatLoginUrlDto> {
+  async changePhone(userId: number, changePhoneDto: ChangePhoneDto): Promise<UserResponseDto> {
+    const { newPhone, newPhoneCode, oldPhoneCode } = changePhoneDto;
+    
     try {
-      // 生成随机state参数（防CSRF攻击）
-      const state = crypto.randomBytes(16).toString('hex');
-      
-      // 构建微信登录URL
-      const finalRedirectUrl = encodeURIComponent(
-        redirectUrl || this.wechatConfig.redirectUrl
+      // 1. 验证新手机号验证码
+      const isNewPhoneValid = await this.smsService.verifyCode(
+        newPhone, 
+        newPhoneCode, 
+        'register'
       );
-      
-      const wechatLoginUrl = 
-        `https://open.weixin.qq.com/connect/qrconnect?` +
-        `appid=${this.wechatConfig.appId}&` +
-        `redirect_uri=${finalRedirectUrl}&` +
-        `response_type=code&` +
-        `scope=snsapi_login&` +
-        `state=${state}#wechat_redirect`;
-      
-      // 可选：将state保存到Redis或数据库中，用于后续验证
-      // await this.cacheService.set(`wechat_state:${state}`, ip, 600); // 10分钟过期
-      
-      console.log('📱 生成微信登录URL:', { 
-        state, 
-        redirectUrl: finalRedirectUrl,
-        appId: this.wechatConfig.appId 
+      if (!isNewPhoneValid) {
+        throw new BadRequestException('新手机号验证码无效或已过期');
+      }
+
+      // 2. 检查新手机号是否已被占用
+      const existingUser = await this.prisma.user.findFirst({
+        where: { 
+          phone: newPhone,
+          NOT: { id: userId }
+        }
       });
+      if (existingUser) {
+        throw new ConflictException('该手机号已被其他用户使用');
+      }
+
+      // 3. 获取当前用户信息
+      const currentUser = await this.prisma.user.findUnique({
+        where: { id: userId }
+      });
+      if (!currentUser) {
+        throw new NotFoundException('用户不存在');
+      }
+
+      // 4. 如果已绑定手机号，需要验证原手机号验证码
+      if (currentUser.phone && !oldPhoneCode) {
+        throw new BadRequestException('请先验证原手机号');
+      }
       
-      return {
-        success: true,
-        data: {
-          loginUrl: wechatLoginUrl,
-          state: state,
-        },
-      };
-      
+      if (currentUser.phone && oldPhoneCode) {
+        const isOldPhoneValid = await this.smsService.verifyCode(
+          currentUser.phone,
+          oldPhoneCode,
+          'register'
+        );
+        if (!isOldPhoneValid) {
+          throw new BadRequestException('原手机号验证码无效或已过期');
+        }
+      }
+
+      // 5. 更新手机号
+      const updatedUser = await this.prisma.user.update({
+        where: { id: userId },
+        data: { 
+          phone: newPhone,
+          updatedAt: new Date()
+        }
+      });
+
+      // 6. 返回脱敏后的用户信息（复用现有逻辑）
+      return this.sanitizeUser(updatedUser);
+
     } catch (error) {
-      console.error('❌ 生成微信登录URL失败:', error);
-      throw new BadRequestException('生成微信登录URL失败');
+      if (error instanceof BadRequestException || 
+          error instanceof ConflictException || 
+          error instanceof NotFoundException) {
+        throw error;
+      }
+      console.error('更换手机号失败:', error);
+      throw new InternalServerErrorException('更换手机号失败，请稍后重试');
     }
   }
 
+
+
+  /**
+   * 修改密码
+   */
+  async changePassword(userId: number, changePasswordDto: ChangePasswordDto): Promise<void> {
+    const { currentPassword, newPassword } = changePasswordDto;
+    
+    try {
+      // 1. 获取当前用户信息
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          passwordHash: true,
+        }
+      });
+      if (!user) {
+        throw new NotFoundException('用户不存在');
+      }
+
+      // 2. 如果已设置密码，需要验证当前密码
+      if (user.passwordHash && !currentPassword) {
+        throw new BadRequestException('请输入当前密码');
+      }
+      
+      if (user.passwordHash && currentPassword) {
+        const isPasswordValid = await bcrypt.compare(currentPassword, user.passwordHash);
+        if (!isPasswordValid) {
+          throw new BadRequestException('当前密码错误');
+        }
+      }
+
+      // 3. 检查新密码是否与当前密码相同
+      if (user.passwordHash && currentPassword === newPassword) {
+        throw new BadRequestException('新密码不能与当前密码相同');
+      }
+
+      // 4. 加密新密码
+      const saltRounds = 12; // 使用更安全的加密轮数
+      const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+
+      // 5. 更新密码
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { 
+          passwordHash: hashedPassword,
+          updatedAt: new Date()
+        }
+      });
+
+      console.log(`用户 ${userId} 密码修改成功`);
+
+    } catch (error) {
+      if (error instanceof BadRequestException || 
+          error instanceof NotFoundException) {
+        throw error;
+      }
+      console.error('修改密码失败:', error);
+      throw new InternalServerErrorException('修改密码失败，请稍后重试');
+    }
+  }
+
+  /**
+   * 完善微信绑定实现
+   * 通过微信授权码获取用户信息并绑定到现有账号
+   */
+  async bindWechatAccount(userId: number, wechatBindDto: WechatBindDto): Promise<WechatBindStatusDto> {
+    const { code } = wechatBindDto;
+    
+    try {
+      // 1. 检查用户是否存在
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId }
+      });
+      if (!user) {
+        throw new NotFoundException('用户不存在');
+      }
+
+      // 2. 检查是否已绑定微信
+      if (user.wechatOpenid) {
+        throw new ConflictException('该账号已绑定微信，请先解绑');
+      }
+
+      // 3. 通过授权码获取微信用户信息
+      const wechatUserInfo = await this.getWechatUserInfo(code);
+      
+      // 4. 检查该微信号是否已被其他账号绑定
+      const existingWechatUser = await this.prisma.user.findFirst({
+        where: {
+          OR: [
+            { wechatOpenid: wechatUserInfo.openid },
+            ...(wechatUserInfo.unionid ? [{ wechatUnionid: wechatUserInfo.unionid }] : [])
+          ]
+        }
+      });
+
+      if (existingWechatUser && existingWechatUser.id !== userId) {
+        throw new ConflictException('该微信账号已被其他用户绑定');
+      }
+
+      // 5. 绑定微信信息到用户账号
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          wechatOpenid: wechatUserInfo.openid,
+          wechatUnionid: wechatUserInfo.unionid || null,
+          wechatNickname: wechatUserInfo.nickname,
+          wechatAvatar: wechatUserInfo.headimgurl,
+          wechatBoundAt: new Date(),
+          updatedAt: new Date()
+        }
+      });
+
+      console.log(`用户 ${userId} 微信绑定成功: ${wechatUserInfo.nickname}`);
+
+      return {
+        isBound: true,
+        wechatNickname: wechatUserInfo.nickname,
+        wechatAvatar: wechatUserInfo.headimgurl,
+        boundAt: new Date().toISOString()
+      };
+
+    } catch (error) {
+      if (error instanceof NotFoundException || 
+          error instanceof ConflictException) {
+        throw error;
+      }
+      console.error('微信绑定失败:', error);
+      throw new InternalServerErrorException('微信绑定失败，请稍后重试');
+    }
+  }
+
+  /**
+   * 通过微信授权码获取用户信息
+   * 实现完整的微信OAuth2.0流程
+   */
+  private async getWechatUserInfo(code: string) {
+    const appId = this.configService.get('WECHAT_APPID');
+    const appSecret = this.configService.get('WECHAT_APPSECRET');
+    
+    if (!appId || !appSecret) {
+      console.warn('微信开放平台配置缺失，使用Mock数据');
+      // Mock数据用于开发测试
+      return {
+        openid: `mock_openid_${Date.now()}`,
+        nickname: 'Mock微信用户',
+        headimgurl: 'https://thirdwx.qlogo.cn/mmopen/mock_avatar.jpg',
+        unionid: `mock_unionid_${Date.now()}`
+      };
+    }
+
+    try {
+      // 第一步：通过code换取access_token
+      const tokenResponse = await fetch(
+        `https://api.weixin.qq.com/sns/oauth2/access_token?appid=${appId}&secret=${appSecret}&code=${code}&grant_type=authorization_code`
+      );
+      const tokenData = await tokenResponse.json();
+      
+      if (tokenData.errcode) {
+        throw new BadRequestException(`微信授权失败: ${tokenData.errmsg}`);
+      }
+
+      const { access_token, openid } = tokenData;
+
+      // 第二步：通过access_token获取用户信息
+      const userResponse = await fetch(
+        `https://api.weixin.qq.com/sns/userinfo?access_token=${access_token}&openid=${openid}&lang=zh_CN`
+      );
+      const userData = await userResponse.json();
+      
+      if (userData.errcode) {
+        throw new BadRequestException(`获取微信用户信息失败: ${userData.errmsg}`);
+      }
+
+      return {
+        openid: userData.openid,
+        nickname: userData.nickname,
+        headimgurl: userData.headimgurl,
+        unionid: userData.unionid
+      };
+
+    } catch (error) {
+      console.error('微信API调用失败:', error);
+      throw new BadRequestException('微信授权失败，请重试');
+    }
+  }
+
+  /**
+   * 获取微信登录URL（完善实现）
+   */
+  async getWechatLoginUrl(redirectUrl?: string, ip?: string) {
+    const appId = this.configService.get('WECHAT_APPID');
+    const configuredRedirectUrl = this.configService.get('WECHAT_REDIRECT_URL');
+    
+    if (!appId) {
+      console.warn('微信开放平台AppID未配置，返回Mock URL');
+      return {
+        success: true,
+        data: {
+          loginUrl: 'https://mock-wechat-login.example.com/qrcode',
+          state: `mock_state_${Date.now()}`
+        }
+      };
+    }
+
+    // 生成随机state参数防止CSRF攻击
+    const state = `${Date.now()}_${Math.random().toString(36).substring(2)}`;
+    
+    // 使用配置的回调URL或传入的URL
+    const finalRedirectUrl = redirectUrl || configuredRedirectUrl;
+    
+    // 构建微信登录URL
+    const loginUrl = `https://open.weixin.qq.com/connect/qrconnect?appid=${appId}&redirect_uri=${encodeURIComponent(finalRedirectUrl)}&response_type=code&scope=snsapi_login&state=${state}#wechat_redirect`;
+
+    return {
+      success: true,
+      data: {
+        loginUrl,
+        state
+      }
+    };
+  }
   /**
    * 微信登录
    */
@@ -185,37 +444,6 @@ export class AuthService {
       }
       
       throw new BadRequestException('微信登录失败，请重试');
-    }
-  }
-
-  /**
-   * 绑定微信账号
-   */
-  async bindWechatAccount(userId: number, dto: WechatBindDto): Promise<{ success: boolean; message: string }> {
-    try {
-      // 类似微信登录的流程，但是绑定到现有用户
-      // 这里简化实现，实际需要完整的微信API调用
-      
-      // 检查用户是否已绑定微信
-      const user = await this.prisma.user.findUnique({
-        where: { id: userId },
-      });
-      
-      if (!user) {
-        throw new BadRequestException('用户不存在');
-      }
-      
-      // 这里应该调用微信API获取用户信息，然后更新到数据库
-      // 为了演示，先返回成功
-      
-      return {
-        success: true,
-        message: '微信账号绑定成功'
-      };
-      
-    } catch (error) {
-      console.error('❌ 微信账号绑定失败:', error);
-      throw new BadRequestException('微信账号绑定失败');
     }
   }
 

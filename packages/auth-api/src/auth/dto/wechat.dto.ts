@@ -100,3 +100,17 @@ export class WechatBindStatusDto {
   })
   boundAt?: string;
 }
+
+/**
+ * 微信用户信息（内部使用）
+ */
+export interface WechatUserInfo {
+  openid: string;
+  nickname: string;
+  headimgurl: string;
+  unionid?: string;
+  sex?: number;
+  province?: string;
+  city?: string;
+  country?: string;
+}
